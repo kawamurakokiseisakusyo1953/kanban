@@ -9,18 +9,25 @@
   :root {
     --bg: #1a1f2e; --card: #242938; --border: #2e3548;
     --accent: #4f9cf9; --accent2: #34d399; --danger: #f87171;
-    --text: #e8eaf0; --sub: #8892a4; --input-bg: #1a1f2e;
+    --warn: #fbbf24; --text: #e8eaf0; --sub: #8892a4; --input-bg: #1a1f2e;
   }
   body { background: var(--bg); color: var(--text); font-family: 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif; min-height: 100vh; display: flex; flex-direction: column; }
-  header { background: var(--card); border-bottom: 1px solid var(--border); padding: 14px 16px; display: flex; align-items: center; gap: 10px; }
-  header .logo { width: 32px; height: 32px; background: var(--accent); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
-  header h1 { font-size: 16px; font-weight: 700; }
-  header .right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-  header .maker-badge { background: var(--border); border-radius: 20px; padding: 4px 12px; font-size: 12px; color: var(--sub); cursor: pointer; }
-  header .history-btn { background: var(--border); border-radius: 20px; padding: 4px 12px; font-size: 12px; color: var(--sub); cursor: pointer; border: none; }
-  .screen { display: none; flex-direction: column; flex: 1; padding: 20px 16px; }
+
+  /* ヘッダー */
+  header { background: var(--card); border-bottom: 1px solid var(--border); padding: 12px 16px; display: flex; align-items: center; gap: 8px; }
+  header .logo { width: 30px; height: 30px; background: var(--accent); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+  header h1 { font-size: 15px; font-weight: 700; }
+  header .right { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+  .hbtn { background: var(--border); border: none; border-radius: 20px; padding: 5px 10px; font-size: 11px; color: var(--sub); cursor: pointer; white-space: nowrap; }
+  .hbtn.has-data { background: rgba(251,191,36,0.2); color: var(--warn); border: 1px solid var(--warn); }
+  .maker-badge { background: var(--border); border-radius: 20px; padding: 5px 10px; font-size: 11px; color: var(--sub); cursor: pointer; white-space: nowrap; }
+
+  /* 画面共通 */
+  .screen { display: none; flex-direction: column; flex: 1; padding: 20px 16px; overflow-y: auto; }
   .screen.active { display: flex; }
   .screen-title { font-size: 13px; color: var(--sub); letter-spacing: 0.1em; margin-bottom: 20px; }
+
+  /* ログイン */
   .login-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 20px; }
   .field-wrap { display: flex; flex-direction: column; gap: 8px; }
   .field-label { font-size: 13px; color: var(--sub); }
@@ -28,7 +35,10 @@
   .maker-select:focus { border-color: var(--accent); }
   .pw-input { width: 100%; background: var(--input-bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 18px; padding: 12px 14px; outline: none; }
   .pw-input:focus { border-color: var(--accent); }
-  .btn-primary { width: 100%; background: var(--accent); color: #fff; border: none; border-radius: 12px; padding: 16px; font-size: 16px; font-weight: 700; cursor: pointer; }
+  .btn-primary { width: 100%; background: var(--accent); color: #fff; border: none; border-radius: 12px; padding: 16px; font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 4px; }
+  .btn-primary:active { opacity: 0.8; }
+
+  /* QR */
   .qr-area { background: #000; border-radius: 16px; overflow: hidden; position: relative; width: 100%; aspect-ratio: 1; margin-bottom: 16px; }
   #qr-video { width: 100%; height: 100%; object-fit: cover; display: block; }
   canvas#qr-canvas { display: none; }
@@ -37,6 +47,8 @@
   .qr-status { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; font-size: 14px; color: var(--sub); text-align: center; margin-bottom: 16px; }
   .qr-status.success { color: var(--accent2); border-color: var(--accent2); }
   .qr-status.error { color: var(--danger); border-color: var(--danger); }
+
+  /* 入力 */
   .info-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
   .info-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); }
   .info-row:last-child { border-bottom: none; }
@@ -48,17 +60,47 @@
   .num-input:focus { border-color: var(--accent); }
   .btn-row { display: flex; gap: 10px; margin-top: 8px; }
   .btn-secondary { flex: 1; background: var(--card); border: 1px solid var(--border); border-radius: 12px; color: var(--text); font-size: 15px; font-weight: 600; padding: 14px; cursor: pointer; }
+
+  /* 送信中 */
   .sending-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
   .spinner { width: 48px; height: 48px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* 保存完了 */
   .done-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; }
   .done-icon { width: 72px; height: 72px; background: rgba(52,211,153,0.15); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 36px; }
   .done-title { font-size: 22px; font-weight: 700; }
   .done-sub { font-size: 14px; color: var(--sub); }
   .done-detail { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 20px; width: 100%; margin-top: 8px; }
+
+  /* エラー */
   .error-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; }
   .error-icon { width: 72px; height: 72px; background: rgba(248,113,113,0.15); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 36px; }
-  /* 確認ダイアログ */
+
+  /* 未送信・履歴リスト共通 */
+  .list-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .list-count { font-size: 13px; color: var(--sub); }
+  .item-list { display: flex; flex-direction: column; gap: 10px; }
+  .list-empty { text-align: center; color: var(--sub); margin-top: 40px; font-size: 14px; }
+
+  /* 未送信アイテム */
+  .unsent-item { background: var(--card); border: 1px solid var(--warn); border-radius: 12px; padding: 14px 16px; }
+  .unsent-item .i-time { font-size: 11px; color: var(--sub); margin-bottom: 6px; }
+  .unsent-item .i-hinban { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  .unsent-item .i-nums { font-size: 13px; color: var(--sub); margin-bottom: 10px; }
+  .btn-cancel-item { background: rgba(248,113,113,0.15); border: 1px solid var(--danger); border-radius: 8px; color: var(--danger); font-size: 13px; font-weight: 600; padding: 6px 14px; cursor: pointer; }
+
+  /* 送信済みアイテム */
+  .sent-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .sent-item .i-time { font-size: 11px; color: var(--sub); margin-bottom: 6px; }
+  .sent-item .i-hinban { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  .sent-item .i-nums { font-size: 13px; color: var(--sub); }
+
+  /* 一括送信ボタン */
+  .bulk-send-btn { width: 100%; background: var(--accent2); color: #1a1f2e; border: none; border-radius: 12px; padding: 16px; font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 16px; }
+  .bulk-send-btn:disabled { background: var(--border); color: var(--sub); cursor: not-allowed; }
+
+  /* 確認モーダル */
   .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; align-items: center; justify-content: center; padding: 24px; }
   .modal-overlay.show { display: flex; }
   .modal { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; width: 100%; max-width: 360px; }
@@ -67,16 +109,12 @@
   .modal-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
   .modal-row:last-child { border-bottom: none; }
   .modal-row .label { color: var(--sub); }
-  .modal-btns { display: flex; gap: 10px; }
+  .modal-msg { font-size: 14px; color: var(--sub); text-align: center; line-height: 1.6; }
+  .modal-btns { display: flex; gap: 10px; margin-top: 16px; }
   .modal-btns .btn-cancel { flex: 1; background: var(--border); color: var(--text); border: none; border-radius: 10px; padding: 14px; font-size: 15px; font-weight: 600; cursor: pointer; }
   .modal-btns .btn-ok { flex: 2; background: var(--accent); color: #fff; border: none; border-radius: 10px; padding: 14px; font-size: 15px; font-weight: 700; cursor: pointer; }
-  /* 履歴画面 */
-  .history-list { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
-  .history-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
-  .history-item .h-time { font-size: 11px; color: var(--sub); margin-bottom: 6px; }
-  .history-item .h-hinban { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
-  .history-item .h-nums { font-size: 13px; color: var(--sub); }
-  .history-empty { text-align: center; color: var(--sub); margin-top: 40px; font-size: 14px; }
+  .modal-btns .btn-ok.danger { background: var(--danger); }
+
   .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 10px 20px; border-radius: 20px; font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap; z-index: 999; }
   .toast.show { opacity: 1; }
   .debug-log { background: #111; color: #0f0; font-size: 11px; padding: 8px; border-radius: 8px; margin-top: 8px; max-height: 60px; overflow-y: auto; font-family: monospace; }
@@ -88,20 +126,19 @@
   <div class="logo">📋</div>
   <h1>生産記録</h1>
   <div class="right">
-    <button class="history-btn" onclick="showHistory()">履歴</button>
+    <button class="hbtn" id="unsent-btn" onclick="showUnsent()">未送信 0件</button>
+    <button class="hbtn" onclick="showHistory()">履歴</button>
     <div class="maker-badge" id="header-maker" onclick="changeMaker()">未選択</div>
   </div>
 </header>
 
-<!-- ログイン画面 -->
+<!-- ログイン -->
 <div class="screen active" id="screen-login">
   <div class="screen-title">ログイン</div>
   <div class="login-card">
     <div class="field-wrap">
       <span class="field-label">取引先</span>
-      <select class="maker-select" id="maker-select">
-        <option value="">選択してください</option>
-      </select>
+      <select class="maker-select" id="maker-select"><option value="">選択してください</option></select>
     </div>
     <div class="field-wrap">
       <span class="field-label">パスワード</span>
@@ -111,7 +148,7 @@
   </div>
 </div>
 
-<!-- QR読取画面 -->
+<!-- QR読取 -->
 <div class="screen" id="screen-qr">
   <div class="screen-title">かんばんを読み取ってください</div>
   <div class="qr-area">
@@ -123,7 +160,7 @@
   <div class="debug-log" id="debug-log">起動待機中...</div>
 </div>
 
-<!-- 数量入力画面 -->
+<!-- 数量入力 -->
 <div class="screen" id="screen-input">
   <div class="screen-title">数量を入力</div>
   <div class="info-card">
@@ -140,7 +177,18 @@
   </div>
   <div class="btn-row">
     <button class="btn-secondary" onclick="backToQr()">← やり直す</button>
-    <button class="btn-primary" style="flex:2;margin-top:0" onclick="confirmSend()">送信して次へ</button>
+    <button class="btn-primary" style="flex:2;margin-top:0" onclick="confirmSend()">ローカル保存</button>
+  </div>
+</div>
+
+<!-- ローカル保存完了 -->
+<div class="screen" id="screen-done">
+  <div class="done-wrap">
+    <div class="done-icon">📥</div>
+    <div class="done-title">保存しました</div>
+    <div class="done-sub">未送信リストに追加されました</div>
+    <div class="done-detail" id="done-detail"></div>
+    <button class="btn-primary" style="margin-top:16px;width:100%" onclick="nextScan()">次のかんばんを読む</button>
   </div>
 </div>
 
@@ -149,14 +197,13 @@
   <div class="sending-wrap"><div class="spinner"></div><div style="color:var(--sub)">送信中…</div></div>
 </div>
 
-<!-- 完了 -->
-<div class="screen" id="screen-done">
+<!-- 送信完了 -->
+<div class="screen" id="screen-sent-done">
   <div class="done-wrap">
     <div class="done-icon">✅</div>
-    <div class="done-title">保存しました</div>
-    <div class="done-sub" id="done-sub"></div>
-    <div class="done-detail" id="done-detail"></div>
-    <button class="btn-primary" style="margin-top:16px;width:100%" onclick="nextScan()">次のかんばんを読む</button>
+    <div class="done-title">送信完了</div>
+    <div class="done-sub" id="sent-done-sub"></div>
+    <button class="btn-primary" style="margin-top:16px;width:100%" onclick="showScreen('screen-qr'); startCamera()">QR読取に戻る</button>
   </div>
 </div>
 
@@ -166,22 +213,35 @@
     <div class="error-icon">❌</div>
     <div class="done-title" style="color:var(--danger)">エラー</div>
     <div class="done-sub" id="error-msg"></div>
-    <button class="btn-primary" style="margin-top:16px;width:100%;background:var(--danger)" onclick="nextScan()">もう一度試す</button>
-    <button class="btn-secondary" style="width:100%;margin-top:8px" onclick="changeMaker()">ログインに戻る</button>
+    <button class="btn-primary" style="margin-top:16px;width:100%;background:var(--danger)" onclick="showScreen('screen-unsent')">未送信リストに戻る</button>
   </div>
 </div>
 
-<!-- 履歴画面 -->
-<div class="screen" id="screen-history">
-  <div class="screen-title">送信履歴（直近20件）</div>
-  <div class="history-list" id="history-list"></div>
-  <button class="btn-secondary" style="margin-top:16px" onclick="backFromHistory()">← 戻る</button>
+<!-- 未送信リスト -->
+<div class="screen" id="screen-unsent">
+  <div class="list-header">
+    <div class="screen-title" style="margin-bottom:0">未送信リスト</div>
+    <div class="list-count" id="unsent-count"></div>
+  </div>
+  <div class="item-list" id="unsent-list"></div>
+  <button class="bulk-send-btn" id="bulk-send-btn" onclick="confirmBulkSend()">一括送信</button>
+  <button class="btn-secondary" style="margin-top:10px" onclick="backFromList()">← 戻る</button>
 </div>
 
-<!-- 送信確認モーダル -->
+<!-- 送信済み履歴 -->
+<div class="screen" id="screen-history">
+  <div class="list-header">
+    <div class="screen-title" style="margin-bottom:0">送信済み履歴</div>
+    <div class="list-count" id="history-count"></div>
+  </div>
+  <div class="item-list" id="history-list"></div>
+  <button class="btn-secondary" style="margin-top:16px" onclick="backFromList()">← 戻る</button>
+</div>
+
+<!-- 確認モーダル：ローカル保存確認 -->
 <div class="modal-overlay" id="modal-confirm">
   <div class="modal">
-    <div class="modal-title">送信確認</div>
+    <div class="modal-title">内容確認</div>
     <div class="modal-body">
       <div class="modal-row"><span class="label">品番</span><span id="modal-hinban">—</span></div>
       <div class="modal-row"><span class="label">工程</span><span id="modal-kotei">—</span></div>
@@ -189,8 +249,50 @@
       <div class="modal-row"><span class="label">廃却数</span><span id="modal-haikyu">—</span></div>
     </div>
     <div class="modal-btns">
-      <button class="btn-cancel" onclick="closeModal()">キャンセル</button>
-      <button class="btn-ok" onclick="submitData()">送信する</button>
+      <button class="btn-cancel" onclick="closeModal('modal-confirm')">キャンセル</button>
+      <button class="btn-ok" onclick="saveLocal()">保存する</button>
+    </div>
+  </div>
+</div>
+
+<!-- 確認モーダル：一括送信確認 -->
+<div class="modal-overlay" id="modal-bulk">
+  <div class="modal">
+    <div class="modal-title">一括送信</div>
+    <div class="modal-body">
+      <div class="modal-msg" id="modal-bulk-msg"></div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('modal-bulk')">キャンセル</button>
+      <button class="btn-ok" onclick="bulkSend()">送信する</button>
+    </div>
+  </div>
+</div>
+
+<!-- 確認モーダル：取り消し確認 -->
+<div class="modal-overlay" id="modal-delete">
+  <div class="modal">
+    <div class="modal-title">取り消し確認</div>
+    <div class="modal-body">
+      <div class="modal-msg">このデータを削除しますか？<br>削除すると元に戻せません。</div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('modal-delete')">キャンセル</button>
+      <button class="btn-ok danger" id="delete-ok-btn" onclick="executeDelete()">削除する</button>
+    </div>
+  </div>
+</div>
+
+<!-- 確認モーダル：アプリ終了時 -->
+<div class="modal-overlay" id="modal-exit">
+  <div class="modal">
+    <div class="modal-title">⚠️ 未送信データあり</div>
+    <div class="modal-body">
+      <div class="modal-msg" id="modal-exit-msg"></div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('modal-exit')">戻る</button>
+      <button class="btn-ok danger" onclick="forceExit()">このまま閉じる</button>
     </div>
   </div>
 </div>
@@ -216,7 +318,42 @@ let scanInterval = null;
 let lastScanned = "";
 let lastScannedTime = 0;
 let prevScreen = "screen-qr";
+let deleteTargetId = null;
 
+// ========================================
+// ローカルストレージ操作
+// ========================================
+function getUnsent() {
+  return JSON.parse(localStorage.getItem("kanban_unsent") || "[]");
+}
+function saveUnsent(list) {
+  localStorage.setItem("kanban_unsent", JSON.stringify(list));
+}
+function getHistory() {
+  return JSON.parse(localStorage.getItem("kanban_history") || "[]");
+}
+function addHistory(entry) {
+  let hist = getHistory();
+  hist.unshift(entry);
+  if (hist.length > 200) hist = hist.slice(0, 200);
+  localStorage.setItem("kanban_history", JSON.stringify(hist));
+}
+
+// 未送信件数バッジ更新
+function updateUnsentBadge() {
+  const count = getUnsent().length;
+  const btn = document.getElementById("unsent-btn");
+  btn.textContent = "未送信 " + count + "件";
+  if (count > 0) {
+    btn.classList.add("has-data");
+  } else {
+    btn.classList.remove("has-data");
+  }
+}
+
+// ========================================
+// デバッグ・jsQR
+// ========================================
 function dbg(msg) {
   const el = document.getElementById("debug-log");
   if (el) el.textContent = msg;
@@ -238,6 +375,9 @@ function loadJsQR(callback) {
   document.head.appendChild(script);
 }
 
+// ========================================
+// 起動
+// ========================================
 window.onload = () => {
   const sel = document.getElementById("maker-select");
   MAKERS.forEach(m => {
@@ -252,6 +392,8 @@ window.onload = () => {
   if (savedMaker) sel.value = savedMaker;
   if (savedPw)    document.getElementById("pw-input").value = savedPw;
 
+  updateUnsentBadge();
+
   if (savedMaker && savedPw) {
     const maker = MAKERS.find(m => m.name === savedMaker && m.password === savedPw);
     if (maker) {
@@ -259,10 +401,23 @@ window.onload = () => {
       document.getElementById("header-maker").textContent = currentMaker;
       showScreen("screen-qr");
       loadJsQR(() => startCamera());
+      return;
     }
   }
 };
 
+// アプリ終了時の警告
+window.addEventListener("beforeunload", (e) => {
+  const unsent = getUnsent();
+  if (unsent.length > 0) {
+    e.preventDefault();
+    e.returnValue = "";
+  }
+});
+
+// ========================================
+// ログイン
+// ========================================
 document.getElementById("pw-input").addEventListener("keydown", e => {
   if (e.key === "Enter") confirmLogin();
 });
@@ -293,6 +448,9 @@ function changeMaker() {
   showScreen("screen-login");
 }
 
+// ========================================
+// カメラ・QR
+// ========================================
 async function startCamera() {
   dbg("カメラ起動中...");
   document.getElementById("qr-status").className = "qr-status";
@@ -356,11 +514,9 @@ function onQRDetected(qr) {
     }, 2000);
     return;
   }
-  const hinban = qr.substring(38, 63).trim();
-  const kotei  = qr.substring(64, 66).trim();
   currentQR     = qr;
-  currentHinban = hinban || "不明";
-  currentKotei  = kotei  || "不明";
+  currentHinban = qr.substring(38, 63).trim() || "不明";
+  currentKotei  = qr.substring(64, 66).trim() || "不明";
   document.getElementById("qr-status").className = "qr-status success";
   document.getElementById("qr-status").textContent = "読み取り成功！";
   setTimeout(() => {
@@ -374,7 +530,9 @@ function onQRDetected(qr) {
   }, 500);
 }
 
-// 送信確認モーダルを表示
+// ========================================
+// ローカル保存
+// ========================================
 function confirmSend() {
   const seisan = document.getElementById("input-seisan").value.trim();
   const haikyu = document.getElementById("input-haikyu").value.trim();
@@ -389,89 +547,194 @@ function confirmSend() {
   document.getElementById("modal-confirm").classList.add("show");
 }
 
-function closeModal() {
-  document.getElementById("modal-confirm").classList.remove("show");
-}
-
-async function submitData() {
-  closeModal();
+function saveLocal() {
+  closeModal("modal-confirm");
   const now = new Date();
   const datetime = now.toLocaleString("ja-JP", {
     year:"numeric", month:"2-digit", day:"2-digit",
     hour:"2-digit", minute:"2-digit", second:"2-digit"
   });
-  const payload = {
+  const entry = {
+    id: now.getTime(),
+    datetime,
     maker: currentMaker,
     password: MAKERS.find(m => m.name === currentMaker)?.password,
-    datetime, qr: currentQR, hinban: currentHinban, kotei: currentKotei,
-    seisan: parseInt(currentSeisan), haikyu: parseInt(currentHaikyu),
+    qr: currentQR,
+    hinban: currentHinban,
+    kotei: currentKotei,
+    seisan: parseInt(currentSeisan),
+    haikyu: parseInt(currentHaikyu),
   };
-  showScreen("screen-sending");
-  try {
-    const res  = await fetch(GAS_URL, { method:"POST", headers:{"Content-Type":"text/plain"}, body:JSON.stringify(payload) });
-    const json = await res.json();
-    if (json.status === "ok") {
-      // 履歴に保存
-      saveHistory({ datetime, hinban: currentHinban, kotei: currentKotei, seisan: currentSeisan, haikyu: currentHaikyu, maker: currentMaker });
+  const unsent = getUnsent();
+  unsent.push(entry);
+  saveUnsent(unsent);
+  updateUnsentBadge();
 
-      document.getElementById("done-sub").textContent = datetime;
-      document.getElementById("done-detail").innerHTML =
-        `<div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:var(--sub);font-size:13px">品番</span><span style="font-weight:600">${currentHinban}</span></div>
-         <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:var(--sub);font-size:13px">工程</span><span style="font-weight:600">${currentKotei}</span></div>
-         <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:var(--sub);font-size:13px">生産数</span><span style="font-weight:600">${currentSeisan}</span></div>
-         <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:var(--sub);font-size:13px">廃却数</span><span style="font-weight:600">${currentHaikyu}</span></div>`;
-      showScreen("screen-done");
-    } else {
-      document.getElementById("error-msg").textContent = json.message || "不明なエラー";
-      showScreen("screen-error");
+  document.getElementById("done-detail").innerHTML =
+    `<div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:var(--sub);font-size:13px">品番</span><span style="font-weight:600">${currentHinban}</span></div>
+     <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:var(--sub);font-size:13px">工程</span><span style="font-weight:600">${currentKotei}</span></div>
+     <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:var(--sub);font-size:13px">生産数</span><span style="font-weight:600">${currentSeisan}</span></div>
+     <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:var(--sub);font-size:13px">廃却数</span><span style="font-weight:600">${currentHaikyu}</span></div>`;
+  showScreen("screen-done");
+}
+
+// ========================================
+// 未送信リスト表示
+// ========================================
+function showUnsent() {
+  prevScreen = document.querySelector(".screen.active")?.id || "screen-qr";
+  const unsent = getUnsent();
+  const list = document.getElementById("unsent-list");
+  document.getElementById("unsent-count").textContent = unsent.length + "件";
+  list.innerHTML = "";
+
+  if (unsent.length === 0) {
+    list.innerHTML = '<div class="list-empty">未送信データはありません</div>';
+  } else {
+    unsent.forEach(item => {
+      const div = document.createElement("div");
+      div.className = "unsent-item";
+      div.innerHTML = `
+        <div class="i-time">${item.datetime}　${item.maker}</div>
+        <div class="i-hinban">${item.hinban}　<span style="font-size:13px;color:var(--sub)">工程 ${item.kotei}</span></div>
+        <div class="i-nums">生産数 ${item.seisan}　廃却数 ${item.haikyu}</div>
+        <button class="btn-cancel-item" onclick="confirmDelete(${item.id})">取り消し</button>
+      `;
+      list.appendChild(div);
+    });
+  }
+
+  const btn = document.getElementById("bulk-send-btn");
+  btn.disabled = unsent.length === 0;
+  btn.textContent = unsent.length > 0 ? "一括送信（" + unsent.length + "件）" : "一括送信";
+  showScreen("screen-unsent");
+}
+
+// ========================================
+// 取り消し
+// ========================================
+function confirmDelete(id) {
+  deleteTargetId = id;
+  document.getElementById("modal-delete").classList.add("show");
+}
+
+function executeDelete() {
+  closeModal("modal-delete");
+  let unsent = getUnsent();
+  unsent = unsent.filter(item => item.id !== deleteTargetId);
+  saveUnsent(unsent);
+  updateUnsentBadge();
+  showUnsent();
+  showToast("取り消しました");
+}
+
+// ========================================
+// 一括送信
+// ========================================
+function confirmBulkSend() {
+  const unsent = getUnsent();
+  if (unsent.length === 0) return;
+  document.getElementById("modal-bulk-msg").textContent =
+    unsent.length + "件のデータを送信します。よろしいですか？";
+  document.getElementById("modal-bulk").classList.add("show");
+}
+
+async function bulkSend() {
+  closeModal("modal-bulk");
+  const unsent = getUnsent();
+  if (unsent.length === 0) return;
+  showScreen("screen-sending");
+
+  let successCount = 0;
+  let failCount = 0;
+  const remaining = [];
+
+  for (const item of unsent) {
+    try {
+      const payload = {
+        maker: item.maker,
+        password: item.password,
+        datetime: item.datetime,
+        qr: item.qr,
+        hinban: item.hinban,
+        kotei: item.kotei,
+        seisan: item.seisan,
+        haikyu: item.haikyu,
+      };
+      const res  = await fetch(GAS_URL, { method:"POST", headers:{"Content-Type":"text/plain"}, body:JSON.stringify(payload) });
+      const json = await res.json();
+      if (json.status === "ok") {
+        successCount++;
+        // 送信済み履歴に追加
+        const sentDatetime = new Date().toLocaleString("ja-JP", {
+          year:"numeric", month:"2-digit", day:"2-digit",
+          hour:"2-digit", minute:"2-digit", second:"2-digit"
+        });
+        addHistory({ ...item, sentDatetime });
+      } else {
+        failCount++;
+        remaining.push(item);
+      }
+    } catch(e) {
+      failCount++;
+      remaining.push(item);
     }
-  } catch (err) {
-    document.getElementById("error-msg").textContent = "通信エラー：" + err.message;
+  }
+
+  saveUnsent(remaining);
+  updateUnsentBadge();
+
+  if (failCount === 0) {
+    document.getElementById("sent-done-sub").textContent = successCount + "件の送信が完了しました";
+    showScreen("screen-sent-done");
+  } else {
+    document.getElementById("error-msg").textContent =
+      successCount + "件成功、" + failCount + "件失敗。失敗分は未送信リストに残っています。";
     showScreen("screen-error");
   }
 }
 
-// 履歴保存（直近20件）
-function saveHistory(entry) {
-  let hist = JSON.parse(localStorage.getItem("kanban_history") || "[]");
-  hist.unshift(entry);
-  if (hist.length > 20) hist = hist.slice(0, 20);
-  localStorage.setItem("kanban_history", JSON.stringify(hist));
-}
-
-// 履歴表示
+// ========================================
+// 送信済み履歴表示
+// ========================================
 function showHistory() {
   prevScreen = document.querySelector(".screen.active")?.id || "screen-qr";
-  const hist = JSON.parse(localStorage.getItem("kanban_history") || "[]");
+  const hist = getHistory();
   const list = document.getElementById("history-list");
+  document.getElementById("history-count").textContent = hist.length + "件";
   list.innerHTML = "";
+
   if (hist.length === 0) {
-    list.innerHTML = '<div class="history-empty">履歴がありません</div>';
+    list.innerHTML = '<div class="list-empty">送信履歴がありません</div>';
   } else {
     hist.forEach(h => {
-      const item = document.createElement("div");
-      item.className = "history-item";
-      item.innerHTML = `
-        <div class="h-time">${h.datetime}　${h.maker}</div>
-        <div class="h-hinban">${h.hinban}　<span style="font-size:13px;color:var(--sub)">工程 ${h.kotei}</span></div>
-        <div class="h-nums">生産数 ${h.seisan}　廃却数 ${h.haikyu}</div>
+      const div = document.createElement("div");
+      div.className = "sent-item";
+      div.innerHTML = `
+        <div class="i-time">📅 読取 ${h.datetime}　${h.maker}</div>
+        <div class="i-time">📤 送信 ${h.sentDatetime}</div>
+        <div class="i-hinban">${h.hinban}　<span style="font-size:13px;color:var(--sub)">工程 ${h.kotei}</span></div>
+        <div class="i-nums">生産数 ${h.seisan}　廃却数 ${h.haikyu}</div>
       `;
-      list.appendChild(item);
+      list.appendChild(div);
     });
   }
   showScreen("screen-history");
 }
 
-function backFromHistory() {
-  showScreen(prevScreen);
-}
-
+// ========================================
+// 画面制御
+// ========================================
 function showScreen(id) {
   document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
   document.getElementById(id).classList.add("active");
 }
 function backToQr() { showScreen("screen-qr"); startCamera(); }
 function nextScan() { showScreen("screen-qr"); lastScanned = ""; startCamera(); }
+function backFromList() { showScreen(prevScreen); if (prevScreen === "screen-qr") startCamera(); }
+function closeModal(id) { document.getElementById(id).classList.remove("show"); }
+function forceExit() { closeModal("modal-exit"); window.close(); }
+
 function showToast(msg) {
   const t = document.getElementById("toast");
   t.textContent = msg; t.classList.add("show");

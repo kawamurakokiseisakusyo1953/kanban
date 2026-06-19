@@ -137,9 +137,6 @@
 <div class="toast" id="toast"></div>
 
 <script>
-// ========================================
-// GAS URL
-// ========================================
 const GAS_URL = "https://script.google.com/macros/s/AKfycbwhrISJ5NKxNsTMAmIfXUErRb6i2aOoRglKrseUhRNMjCZj_7k8qFWJpukIZtJfv1RFuw/exec";
 
 const MAKERS = [
@@ -155,55 +152,57 @@ let videoStream = null;
 let scanInterval = null;
 let lastScanned = "";
 let lastScannedTime = 0;
-let jsQRLoaded = false;
 
-// デバッグログ
 function dbg(msg) {
   const el = document.getElementById("debug-log");
-  if (el) {
-    el.textContent = msg;
-    console.log(msg);
-  }
+  if (el) el.textContent = msg;
 }
 
-// jsQRを動的に読み込む
 function loadJsQR(callback) {
-  dbg("jsQRライブラリ読み込み中...");
+  dbg("jsQR読み込み中...");
   const script = document.createElement("script");
   script.src = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js";
-  script.onload = () => {
-    jsQRLoaded = true;
-    dbg("jsQR読み込み完了");
-    callback();
-  };
+  script.onload = () => { dbg("jsQR読み込み完了"); callback(); };
   script.onerror = () => {
-    dbg("jsQR読み込み失敗、代替CDN試行...");
-    const script2 = document.createElement("script");
-    script2.src = "https://unpkg.com/jsqr@1.4.0/dist/jsQR.js";
-    script2.onload = () => {
-      jsQRLoaded = true;
-      dbg("jsQR(代替)読み込み完了");
-      callback();
-    };
-    script2.onerror = () => {
-      dbg("jsQR読み込み失敗。ネット確認してください");
-    };
-    document.head.appendChild(script2);
+    const s2 = document.createElement("script");
+    s2.src = "https://unpkg.com/jsqr@1.4.0/dist/jsQR.js";
+    s2.onload = () => { dbg("jsQR(代替)読み込み完了"); callback(); };
+    s2.onerror = () => { dbg("jsQR読み込み失敗"); };
+    document.head.appendChild(s2);
   };
   document.head.appendChild(script);
 }
 
 // ========================================
-// 起動
+// 起動：自動ログイン
 // ========================================
 window.onload = () => {
   buildMakerList();
-  const saved = localStorage.getItem("kanban_maker");
-  if (saved && MAKERS.find(m => m.name === saved)) {
+  const savedMaker = localStorage.getItem("kanban_maker");
+  const savedPw = localStorage.getItem("kanban_pw");
+
+  if (savedMaker && savedPw) {
+    const maker = MAKERS.find(m => m.name === savedMaker && m.password === savedPw);
+    if (maker) {
+      // 自動ログイン
+      currentMaker = savedMaker;
+      document.getElementById("header-maker").textContent = currentMaker;
+      showScreen("screen-qr");
+      loadJsQR(() => startCamera());
+      return;
+    }
+  }
+
+  // 前回のメーカーをハイライト
+  if (savedMaker) {
     setTimeout(() => {
-      document.querySelectorAll(".maker-btn").forEach(b => {
-        if (b.dataset.name === saved) b.classList.add("selected");
-      });
+      const btn = document.querySelector(`.maker-btn[data-name="${savedMaker}"]`);
+      if (btn) {
+        btn.classList.add("selected");
+        currentMaker = savedMaker;
+        document.getElementById("pw-wrap").style.display = "block";
+        if (savedPw) document.getElementById("pw-input").value = savedPw;
+      }
     }, 50);
   }
 };
@@ -225,7 +224,7 @@ function selectMaker(name) {
   document.querySelector(`.maker-btn[data-name="${name}"]`).classList.add("selected");
   currentMaker = name;
   document.getElementById("pw-wrap").style.display = "block";
-  document.getElementById("pw-input").value = "";
+  document.getElementById("pw-input").value = localStorage.getItem("kanban_pw") || "";
   document.getElementById("pw-input").focus();
 }
 
@@ -238,7 +237,9 @@ function confirmMaker() {
   const maker = MAKERS.find(m => m.name === currentMaker);
   if (!maker) { showToast("メーカーを選んでください"); return; }
   if (pw !== maker.password) { showToast("パスワードが違います"); return; }
+  // メーカー名・パスワード両方保存
   localStorage.setItem("kanban_maker", currentMaker);
+  localStorage.setItem("kanban_pw", pw);
   document.getElementById("header-maker").textContent = currentMaker;
   showScreen("screen-qr");
   loadJsQR(() => startCamera());
@@ -247,13 +248,13 @@ function confirmMaker() {
 function changeMaker() {
   stopCamera();
   currentMaker = null;
+  localStorage.removeItem("kanban_maker");
+  localStorage.removeItem("kanban_pw");
   document.getElementById("pw-wrap").style.display = "none";
+  document.getElementById("header-maker").textContent = "メーカー未選択";
   showScreen("screen-maker");
 }
 
-// ========================================
-// カメラ
-// ========================================
 async function startCamera() {
   dbg("カメラ起動中...");
   document.getElementById("qr-status").className = "qr-status";
@@ -289,34 +290,28 @@ function startScan() {
   scanInterval = setInterval(() => {
     if (!video.videoWidth || !video.videoHeight) return;
     frameCount++;
-    if (frameCount % 30 === 0) dbg("スキャン中... フレーム:" + frameCount + " サイズ:" + video.videoWidth + "x" + video.videoHeight);
-
+    if (frameCount % 30 === 0) dbg("スキャン中... フレーム:" + frameCount);
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     ctx.drawImage(video, 0, 0);
-
     try {
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(imageData.data, imageData.width, imageData.height, {
-        inversionAttempts: "dontInvert"
-      });
+      const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
       if (code && code.data) {
         const now = Date.now();
         if (code.data === lastScanned && now - lastScannedTime < 3000) return;
         lastScanned = code.data;
         lastScannedTime = now;
-        dbg("QR検出！ 文字数:" + code.data.length);
+        dbg("QR検出！ " + code.data.length + "文字");
         onQRDetected(code.data);
       }
-    } catch(e) {
-      dbg("スキャンエラー:" + e.message);
-    }
+    } catch(e) { dbg("スキャンエラー:" + e.message); }
   }, 300);
 }
 
 function onQRDetected(qr) {
   if (qr.length < 50) {
-    dbg("文字数不足: " + qr.length + "文字");
+    dbg("文字数不足: " + qr.length);
     document.getElementById("qr-status").className = "qr-status error";
     document.getElementById("qr-status").textContent = "かんばんQRではありません（" + qr.length + "文字）";
     setTimeout(() => {
@@ -343,9 +338,6 @@ function onQRDetected(qr) {
   }, 500);
 }
 
-// ========================================
-// 送信
-// ========================================
 async function submitData() {
   const seisan = document.getElementById("input-seisan").value.trim();
   const haikyu = document.getElementById("input-haikyu").value.trim();

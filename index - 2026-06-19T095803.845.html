@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<script>
+  if (window.self !== window.top) {
+    window.top.location.href = window.self.location.href;
+  }
+</script>
+<title>生産記録</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #1a1f2e;
+    --card: #242938;
+    --border: #2e3548;
+    --accent: #4f9cf9;
+    --accent2: #34d399;
+    --danger: #f87171;
+    --text: #e8eaf0;
+    --sub: #8892a4;
+    --input-bg: #1a1f2e;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  header .logo {
+    width: 32px; height: 32px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+  }
+  header h1 { font-size: 16px; font-weight: 700; letter-spacing: 0.05em; }
+  header .maker-badge {
+    margin-left: auto;
+    background: var(--border);
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 12px;
+    color: var(--sub);
+    cursor: pointer;
+  }
+
+  .screen { display: none; flex-direction: column; flex: 1; padding: 20px 16px; }
+  .screen.active { display: flex; }
+
+  .screen-title {
+    font-size: 13px;
+    color: var(--sub);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+  .maker-list { display: flex; flex-direction: column; gap: 10px; }
+  .maker-btn {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    color: var(--text);
+    font-size: 16px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .maker-btn:active { background: var(--border); }
+  .maker-btn .arrow { color: var(--sub); font-size: 18px; }
+  .maker-btn.selected {
+    border-color: var(--accent);
+    background: rgba(79,156,249,0.08);
+  }
+
+  .pw-wrap {
+    margin-top: 24px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .pw-label { font-size: 13px; color: var(--sub); margin-bottom: 10px; }
+  .pw-input {
+    width: 100%;
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 18px;
+    padding: 12px 14px;
+    outline: none;
+    letter-spacing: 0.1em;
+  }
+  .pw-input:focus { border-color: var(--accent); }
+
+  .btn-primary {
+    margin-top: 16px;
+    width: 100%;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    padding: 16px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .btn-primary:active { opacity: 0.8; }
+  .btn-primary:disabled { opacity: 0.4; }
+
+  .qr-area {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    position: relative;
+    aspect-ratio: 1;
+    margin-bottom: 16px;
+  }
+  #qr-video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .qr-overlay {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none;
+  }
+  .qr-frame {
+    width: 60%; aspect-ratio: 1;
+    border: 2px solid var(--accent);
+    border-radius: 8px;
+    box-shadow: 0 0 0 9999px rgba(26,31,46,0.5);
+  }
+  .qr-scan-line {
+    position: absolute;
+    left: 20%; right: 20%;
+    height: 2px;
+    background: var(--accent);
+    animation: scan 2s linear infinite;
+    opacity: 0.8;
+  }
+  @keyframes scan {
+    0% { top: 20%; }
+    100% { top: 80%; }
+  }
+
+  .qr-status {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    font-size: 14px;
+    color: var(--sub);
+    text-align: center;
+    margin-bottom: 16px;
+  }
+  .qr-status.success { color: var(--accent2); border-color: var(--accent2); }
+  .qr-status.error { color: var(--danger); border-color: var(--danger); }
+
+  .info-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .info-row:last-child { border-bottom: none; }
+  .info-label { font-size: 12px; color: var(--sub); }
+  .info-value { font-size: 15px; font-weight: 600; }
+
+  .num-input-wrap { margin-bottom: 12px; }
+  .num-label {
+    font-size: 13px; color: var(--sub);
+    margin-bottom: 8px;
+    display: block;
+  }
+  .num-input {
+    width: 100%;
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 28px;
+    font-weight: 700;
+    padding: 14px 16px;
+    outline: none;
+    text-align: center;
+  }
+  .num-input:focus { border-color: var(--accent); }
+
+  .btn-row { display: flex; gap: 10px; margin-top: 8px; }
+  .btn-secondary {
+    flex: 1;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 600;
+    padding: 14px;
+    cursor: pointer;
+  }
+  .btn-secondary:active { background: var(--border); }
+
+  .sending-wrap {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 16px;
+  }
+  .spinner {
+    width: 48px; height: 48px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .done-wrap {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 12px;
+    text-align: center;
+  }
+  .done-icon {
+    width: 72px; height: 72px;
+    background: rgba(52,211,153,0.15);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 36px;
+  }
+  .done-title { font-size: 22px; font-weight: 700; }
+  .done-sub { font-size: 14px; color: var(--sub); }
+  .done-detail {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 20px;
+    width: 100%;
+    margin-top: 8px;
+  }
+
+  .error-wrap {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 12px;
+    text-align: center;
+  }
+  .error-icon {
+    width: 72px; height: 72px;
+    background: rgba(248,113,113,0.15);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 36px;
+  }
+
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: #333;
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: 20px;
+    font-size: 13px;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 999;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">📋</div>
+  <h1>生産記録</h1>
+  <div class="maker-badge" id="header-maker" onclick="changeMaker()">メーカー未選択</div>
+</header>
+
+<div class="screen active" id="screen-maker">
+  <div class="screen-title">取引先を選択</div>
+  <div class="maker-list" id="maker-list"></div>
+  <div class="pw-wrap" id="pw-wrap" style="display:none">
+    <div class="pw-label">パスワード</div>
+    <input class="pw-input" type="password" id="pw-input" placeholder="パスワードを入力"
+      inputmode="text" autocomplete="off">
+    <button class="btn-primary" id="pw-btn" onclick="confirmMaker()">決定</button>
+  </div>
+</div>
+
+<div class="screen" id="screen-qr">
+  <div class="screen-title">かんばんを読み取ってください</div>
+  <div class="qr-area">
+    <video id="qr-video" playsinline autoplay muted></video>
+    <div class="qr-overlay">
+      <div class="qr-frame"></div>
+      <div class="qr-scan-line"></div>
+    </div>
+  </div>
+  <div class="qr-status" id="qr-status">カメラを起動中…</div>
+</div>
+
+<div class="screen" id="screen-input">
+  <div class="screen-title">数量を入力</div>
+  <div class="info-card">
+    <div class="info-row">
+      <span class="info-label">品番</span>
+      <span class="info-value" id="disp-hinban">—</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">工程</span>
+      <span class="info-value" id="disp-kotei">—</span>
+    </div>
+  </div>
+  <div class="num-input-wrap">
+    <label class="num-label">生産数</label>
+    <input class="num-input" type="number" id="input-seisan" inputmode="numeric" min="0" placeholder="0">
+  </div>
+  <div class="num-input-wrap">
+    <label class="num-label">廃却数</label>
+    <input class="num-input" type="number" id="input-haikyu" inputmode="numeric" min="0" placeholder="0">
+  </div>
+  <div class="btn-row">
+    <button class="btn-secondary" onclick="backToQr()">← やり直す</button>
+    <button class="btn-primary" style="flex:2" onclick="submitData()">送信して次へ</button>
+  </div>
+</div>
+
+<div class="screen" id="screen-sending">
+  <div class="sending-wrap">
+    <div class="spinner"></div>
+    <div style="color:var(--sub)">送信中…</div>
+  </div>
+</div>
+
+<div class="screen" id="screen-done">
+  <div class="done-wrap">
+    <div class="done-icon">✅</div>
+    <div class="done-title">保存しました</div>
+    <div class="done-sub" id="done-sub"></div>
+    <div class="done-detail" id="done-detail"></div>
+    <button class="btn-primary" style="margin-top:16px;width:100%" onclick="nextScan()">次のかんばんを読む</button>
+  </div>
+</div>
+
+<div class="screen" id="screen-error">
+  <div class="error-wrap">
+    <div class="error-icon">❌</div>
+    <div class="done-title" style="color:var(--danger)">エラー</div>
+    <div class="done-sub" id="error-msg"></div>
+    <button class="btn-primary" style="margin-top:16px;width:100%;background:var(--danger)" onclick="nextScan()">もう一度試す</button>
+    <button class="btn-secondary" style="width:100%;margin-top:8px" onclick="changeMaker()">メーカー選択に戻る</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<script>
+const GAS_URL = "<?= ScriptApp.getService().getUrl() ?>";
+
+const MAKERS = [
+  { name: "山田鉄工所", password: "yamada" },
+  // 追加はここ↓
+  // { name: "〇〇製作所", password: "xxxxx" },
+];
+
+let currentMaker = null;
+let currentQR = null;
+let currentHinban = null;
+let currentKotei = null;
+let videoStream = null;
+let scanInterval = null;
+let lastScanned = "";
+let lastScannedTime = 0;
+
+window.onload = () => {
+  buildMakerList();
+  const saved = localStorage.getItem("kanban_maker");
+  if (saved && MAKERS.find(m => m.name === saved)) {
+    setTimeout(() => {
+      const btns = document.querySelectorAll(".maker-btn");
+      btns.forEach(b => {
+        if (b.dataset.name === saved) b.classList.add("selected");
+      });
+    }, 50);
+  }
+};
+
+function buildMakerList() {
+  const list = document.getElementById("maker-list");
+  list.innerHTML = "";
+  MAKERS.forEach(m => {
+    const btn = document.createElement("button");
+    btn.className = "maker-btn";
+    btn.dataset.name = m.name;
+    btn.innerHTML = `<span>${m.name}</span><span class="arrow">›</span>`;
+    btn.onclick = () => selectMaker(m.name);
+    list.appendChild(btn);
+  });
+}
+
+function selectMaker(name) {
+  document.querySelectorAll(".maker-btn").forEach(b => b.classList.remove("selected"));
+  document.querySelector(`.maker-btn[data-name="${name}"]`).classList.add("selected");
+  currentMaker = name;
+  document.getElementById("pw-wrap").style.display = "block";
+  document.getElementById("pw-input").value = "";
+  document.getElementById("pw-input").focus();
+}
+
+document.getElementById("pw-input").addEventListener("keydown", e => {
+  if (e.key === "Enter") confirmMaker();
+});
+
+function confirmMaker() {
+  const pw = document.getElementById("pw-input").value.trim();
+  const maker = MAKERS.find(m => m.name === currentMaker);
+  if (!maker) { showToast("メーカーを選んでください"); return; }
+  if (pw !== maker.password) { showToast("パスワードが違います"); return; }
+  localStorage.setItem("kanban_maker", currentMaker);
+  document.getElementById("header-maker").textContent = currentMaker;
+  showScreen("screen-qr");
+  startCamera();
+}
+
+function changeMaker() {
+  stopCamera();
+  currentMaker = null;
+  document.getElementById("pw-wrap").style.display = "none";
+  showScreen("screen-maker");
+}
+
+async function startCamera() {
+  document.getElementById("qr-status").className = "qr-status";
+  document.getElementById("qr-status").textContent = "カメラを起動中…";
+  try {
+    videoStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    const video = document.getElementById("qr-video");
+    video.srcObject = videoStream;
+    video.onloadedmetadata = () => {
+      video.play();
+      document.getElementById("qr-status").textContent = "QRコードをフレームに合わせてください";
+      startScan();
+    };
+  } catch (err) {
+    document.getElementById("qr-status").className = "qr-status error";
+    document.getElementById("qr-status").textContent = "カメラを起動できませんでした：" + err.message;
+  }
+}
+
+function stopCamera() {
+  if (scanInterval) { clearInterval(scanInterval); scanInterval = null; }
+  if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); videoStream = null; }
+}
+
+function startScan() {
+  const video = document.getElementById("qr-video");
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  scanInterval = setInterval(() => {
+    if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(imageData.data, imageData.width, imageData.height);
+    if (code && code.data) {
+      const now = Date.now();
+      if (code.data === lastScanned && now - lastScannedTime < 3000) return;
+      lastScanned = code.data;
+      lastScannedTime = now;
+      onQRDetected(code.data);
+    }
+  }, 200);
+}
+
+function onQRDetected(qr) {
+  if (qr.length < 50) {
+    document.getElementById("qr-status").className = "qr-status error";
+    document.getElementById("qr-status").textContent = "かんばんQRではありません（文字数不足）";
+    setTimeout(() => {
+      document.getElementById("qr-status").className = "qr-status";
+      document.getElementById("qr-status").textContent = "QRコードをフレームに合わせてください";
+    }, 2000);
+    return;
+  }
+  const hinban = qr.substring(38, 63).trim();
+  const kotei = qr.substring(64, 66).trim();
+  currentQR = qr;
+  currentHinban = hinban || "不明";
+  currentKotei = kotei || "不明";
+  document.getElementById("qr-status").className = "qr-status success";
+  document.getElementById("qr-status").textContent = "読み取り成功！";
+  setTimeout(() => {
+    stopCamera();
+    document.getElementById("disp-hinban").textContent = currentHinban;
+    document.getElementById("disp-kotei").textContent = currentKotei;
+    document.getElementById("input-seisan").value = "";
+    document.getElementById("input-haikyu").value = "";
+    showScreen("screen-input");
+    document.getElementById("input-seisan").focus();
+  }, 500);
+}
+
+async function submitData() {
+  const seisan = document.getElementById("input-seisan").value.trim();
+  const haikyu = document.getElementById("input-haikyu").value.trim();
+  if (seisan === "") { showToast("生産数を入力してください"); return; }
+  if (haikyu === "") { showToast("廃却数を入力してください"); return; }
+  const now = new Date();
+  const datetime = now.toLocaleString("ja-JP", {
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit"
+  });
+  const payload = {
+    maker: currentMaker,
+    password: MAKERS.find(m => m.name === currentMaker)?.password,
+    datetime,
+    qr: currentQR,
+    hinban: currentHinban,
+    kotei: currentKotei,
+    seisan: parseInt(seisan),
+    haikyu: parseInt(haikyu),
+  };
+  showScreen("screen-sending");
+  try {
+    const res = await fetch(GAS_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain" },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (json.status === "ok") {
+      document.getElementById("done-sub").textContent = datetime;
+      document.getElementById("done-detail").innerHTML =
+        `<div style="display:flex;justify-content:space-between;padding:4px 0">
+          <span style="color:var(--sub);font-size:13px">品番</span>
+          <span style="font-weight:600">${currentHinban}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0">
+          <span style="color:var(--sub);font-size:13px">工程</span>
+          <span style="font-weight:600">${currentKotei}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0">
+          <span style="color:var(--sub);font-size:13px">生産数</span>
+          <span style="font-weight:600">${seisan}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0">
+          <span style="color:var(--sub);font-size:13px">廃却数</span>
+          <span style="font-weight:600">${haikyu}</span>
+        </div>`;
+      showScreen("screen-done");
+    } else {
+      document.getElementById("error-msg").textContent = json.message || "不明なエラー";
+      showScreen("screen-error");
+    }
+  } catch (err) {
+    document.getElementById("error-msg").textContent = "通信エラー：" + err.message;
+    showScreen("screen-error");
+  }
+}
+
+function showScreen(id) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+}
+
+function backToQr() {
+  showScreen("screen-qr");
+  startCamera();
+}
+
+function nextScan() {
+  showScreen("screen-qr");
+  lastScanned = "";
+  startCamera();
+}
+
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2500);
+}
+</script>
+</body>
+</html>

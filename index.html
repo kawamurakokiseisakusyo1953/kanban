@@ -19,18 +19,14 @@
   .screen { display: none; flex-direction: column; flex: 1; padding: 20px 16px; }
   .screen.active { display: flex; }
   .screen-title { font-size: 13px; color: var(--sub); letter-spacing: 0.1em; margin-bottom: 20px; }
-
-  /* ログイン画面 */
-  .login-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
-  .field-label { font-size: 13px; color: var(--sub); margin-bottom: 8px; display: block; }
-  .maker-select { width: 100%; background: var(--input-bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 16px; padding: 12px 14px; outline: none; appearance: none; }
+  .login-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 20px; }
+  .field-wrap { display: flex; flex-direction: column; gap: 8px; }
+  .field-label { font-size: 13px; color: var(--sub); }
+  .maker-select { width: 100%; background: var(--input-bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 16px; padding: 12px 14px; outline: none; }
   .maker-select:focus { border-color: var(--accent); }
   .pw-input { width: 100%; background: var(--input-bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 18px; padding: 12px 14px; outline: none; }
   .pw-input:focus { border-color: var(--accent); }
-  .btn-primary { width: 100%; background: var(--accent); color: #fff; border: none; border-radius: 12px; padding: 16px; font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 4px; }
-  .btn-primary:active { opacity: 0.8; }
-
-  /* QR画面 */
+  .btn-primary { width: 100%; background: var(--accent); color: #fff; border: none; border-radius: 12px; padding: 16px; font-size: 16px; font-weight: 700; cursor: pointer; }
   .qr-area { background: #000; border-radius: 16px; overflow: hidden; position: relative; width: 100%; aspect-ratio: 1; margin-bottom: 16px; }
   #qr-video { width: 100%; height: 100%; object-fit: cover; display: block; }
   canvas#qr-canvas { display: none; }
@@ -39,8 +35,6 @@
   .qr-status { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; font-size: 14px; color: var(--sub); text-align: center; margin-bottom: 16px; }
   .qr-status.success { color: var(--accent2); border-color: var(--accent2); }
   .qr-status.error { color: var(--danger); border-color: var(--danger); }
-
-  /* 入力画面 */
   .info-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
   .info-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); }
   .info-row:last-child { border-bottom: none; }
@@ -52,23 +46,16 @@
   .num-input:focus { border-color: var(--accent); }
   .btn-row { display: flex; gap: 10px; margin-top: 8px; }
   .btn-secondary { flex: 1; background: var(--card); border: 1px solid var(--border); border-radius: 12px; color: var(--text); font-size: 15px; font-weight: 600; padding: 14px; cursor: pointer; }
-
-  /* 送信中 */
   .sending-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
   .spinner { width: 48px; height: 48px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
-
-  /* 完了 */
   .done-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; }
   .done-icon { width: 72px; height: 72px; background: rgba(52,211,153,0.15); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 36px; }
   .done-title { font-size: 22px; font-weight: 700; }
   .done-sub { font-size: 14px; color: var(--sub); }
   .done-detail { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 20px; width: 100%; margin-top: 8px; }
-
-  /* エラー */
   .error-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; }
   .error-icon { width: 72px; height: 72px; background: rgba(248,113,113,0.15); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 36px; }
-
   .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 10px 20px; border-radius: 20px; font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap; z-index: 999; }
   .toast.show { opacity: 1; }
   .debug-log { background: #111; color: #0f0; font-size: 11px; padding: 8px; border-radius: 8px; margin-top: 8px; max-height: 60px; overflow-y: auto; font-family: monospace; }
@@ -82,18 +69,18 @@
   <div class="maker-badge" id="header-maker" onclick="changeMaker()">メーカー未選択</div>
 </header>
 
-<!-- ログイン画面 -->
+<!-- ログイン画面：最初からメーカー＋PW両方表示 -->
 <div class="screen active" id="screen-login">
   <div class="screen-title">ログイン</div>
   <div class="login-card">
-    <div>
-      <label class="field-label">取引先</label>
+    <div class="field-wrap">
+      <span class="field-label">取引先</span>
       <select class="maker-select" id="maker-select">
         <option value="">選択してください</option>
       </select>
     </div>
-    <div>
-      <label class="field-label">パスワード</label>
+    <div class="field-wrap">
+      <span class="field-label">パスワード</span>
       <input class="pw-input" type="password" id="pw-input" placeholder="パスワードを入力" autocomplete="off">
     </div>
     <button class="btn-primary" onclick="confirmLogin()">決定</button>
@@ -185,6 +172,7 @@ function dbg(msg) {
 }
 
 function loadJsQR(callback) {
+  if (typeof jsQR === "function") { callback(); return; }
   dbg("jsQR読み込み中...");
   const script = document.createElement("script");
   script.src = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js";
@@ -192,7 +180,7 @@ function loadJsQR(callback) {
   script.onerror = () => {
     const s2 = document.createElement("script");
     s2.src = "https://unpkg.com/jsqr@1.4.0/dist/jsQR.js";
-    s2.onload = () => { dbg("jsQR(代替)読み込み完了"); callback(); };
+    s2.onload = () => { dbg("jsQR(代替)完了"); callback(); };
     s2.onerror = () => { dbg("jsQR読み込み失敗"); };
     document.head.appendChild(s2);
   };
@@ -200,10 +188,10 @@ function loadJsQR(callback) {
 }
 
 // ========================================
-// 起動
+// 起動：セレクト構築→記憶復元→自動ログイン
 // ========================================
 window.onload = () => {
-  // セレクトボックスにメーカーを追加
+  // セレクトボックス構築
   const sel = document.getElementById("maker-select");
   MAKERS.forEach(m => {
     const opt = document.createElement("option");
@@ -212,14 +200,14 @@ window.onload = () => {
     sel.appendChild(opt);
   });
 
-  // 自動記憶の復元
+  // 記憶を復元
   const savedMaker = localStorage.getItem("kanban_maker");
-  const savedPw = localStorage.getItem("kanban_pw");
+  const savedPw    = localStorage.getItem("kanban_pw");
 
   if (savedMaker) sel.value = savedMaker;
-  if (savedPw) document.getElementById("pw-input").value = savedPw;
+  if (savedPw)    document.getElementById("pw-input").value = savedPw;
 
-  // 両方保存されていれば自動ログイン
+  // 両方一致すれば自動ログイン
   if (savedMaker && savedPw) {
     const maker = MAKERS.find(m => m.name === savedMaker && m.password === savedPw);
     if (maker) {
@@ -227,7 +215,6 @@ window.onload = () => {
       document.getElementById("header-maker").textContent = currentMaker;
       showScreen("screen-qr");
       loadJsQR(() => startCamera());
-      return;
     }
   }
 };
@@ -240,14 +227,12 @@ function confirmLogin() {
   const makerName = document.getElementById("maker-select").value;
   const pw = document.getElementById("pw-input").value.trim();
   if (!makerName) { showToast("取引先を選択してください"); return; }
-  if (!pw) { showToast("パスワードを入力してください"); return; }
+  if (!pw)        { showToast("パスワードを入力してください"); return; }
   const maker = MAKERS.find(m => m.name === makerName);
   if (!maker || pw !== maker.password) { showToast("パスワードが違います"); return; }
 
-  // 記憶
   localStorage.setItem("kanban_maker", makerName);
   localStorage.setItem("kanban_pw", pw);
-
   currentMaker = makerName;
   document.getElementById("header-maker").textContent = currentMaker;
   showScreen("screen-qr");
@@ -265,9 +250,6 @@ function changeMaker() {
   showScreen("screen-login");
 }
 
-// ========================================
-// カメラ・QR
-// ========================================
 async function startCamera() {
   dbg("カメラ起動中...");
   document.getElementById("qr-status").className = "qr-status";
@@ -279,7 +261,7 @@ async function startCamera() {
     const video = document.getElementById("qr-video");
     video.srcObject = videoStream;
     await video.play();
-    dbg("カメラ起動OK。スキャン開始");
+    dbg("カメラ起動OK");
     document.getElementById("qr-status").textContent = "QRコードをフレームに合わせてください";
     startScan();
   } catch (err) {
@@ -291,24 +273,24 @@ async function startCamera() {
 
 function stopCamera() {
   if (scanInterval) { clearInterval(scanInterval); scanInterval = null; }
-  if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); videoStream = null; }
+  if (videoStream)  { videoStream.getTracks().forEach(t => t.stop()); videoStream = null; }
 }
 
 function startScan() {
   const video = document.getElementById("qr-video");
   const canvas = document.getElementById("qr-canvas");
   const ctx = canvas.getContext("2d");
-  let frameCount = 0;
+  let fc = 0;
   scanInterval = setInterval(() => {
     if (!video.videoWidth || !video.videoHeight) return;
-    frameCount++;
-    if (frameCount % 30 === 0) dbg("スキャン中... フレーム:" + frameCount);
+    fc++;
+    if (fc % 30 === 0) dbg("スキャン中... " + fc + "フレーム");
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     ctx.drawImage(video, 0, 0);
     try {
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+      const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(img.data, img.width, img.height, { inversionAttempts: "dontInvert" });
       if (code && code.data) {
         const now = Date.now();
         if (code.data === lastScanned && now - lastScannedTime < 3000) return;
@@ -323,7 +305,6 @@ function startScan() {
 
 function onQRDetected(qr) {
   if (qr.length < 50) {
-    dbg("文字数不足: " + qr.length);
     document.getElementById("qr-status").className = "qr-status error";
     document.getElementById("qr-status").textContent = "かんばんQRではありません（" + qr.length + "文字）";
     setTimeout(() => {
@@ -333,16 +314,16 @@ function onQRDetected(qr) {
     return;
   }
   const hinban = qr.substring(38, 63).trim();
-  const kotei = qr.substring(64, 66).trim();
-  currentQR = qr;
+  const kotei  = qr.substring(64, 66).trim();
+  currentQR     = qr;
   currentHinban = hinban || "不明";
-  currentKotei = kotei || "不明";
+  currentKotei  = kotei  || "不明";
   document.getElementById("qr-status").className = "qr-status success";
   document.getElementById("qr-status").textContent = "読み取り成功！";
   setTimeout(() => {
     stopCamera();
     document.getElementById("disp-hinban").textContent = currentHinban;
-    document.getElementById("disp-kotei").textContent = currentKotei;
+    document.getElementById("disp-kotei").textContent  = currentKotei;
     document.getElementById("input-seisan").value = "";
     document.getElementById("input-haikyu").value = "";
     showScreen("screen-input");
@@ -350,18 +331,15 @@ function onQRDetected(qr) {
   }, 500);
 }
 
-// ========================================
-// 送信
-// ========================================
 async function submitData() {
   const seisan = document.getElementById("input-seisan").value.trim();
   const haikyu = document.getElementById("input-haikyu").value.trim();
-  if (seisan === "") { showToast("生産数を入力してください"); return; }
-  if (haikyu === "") { showToast("廃却数を入力してください"); return; }
+  if (!seisan) { showToast("生産数を入力してください"); return; }
+  if (!haikyu) { showToast("廃却数を入力してください"); return; }
   const now = new Date();
   const datetime = now.toLocaleString("ja-JP", {
-    year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit"
+    year:"numeric", month:"2-digit", day:"2-digit",
+    hour:"2-digit", minute:"2-digit", second:"2-digit"
   });
   const payload = {
     maker: currentMaker,
@@ -371,10 +349,7 @@ async function submitData() {
   };
   showScreen("screen-sending");
   try {
-    const res = await fetch(GAS_URL, {
-      method: "POST", headers: { "Content-Type": "text/plain" },
-      body: JSON.stringify(payload),
-    });
+    const res  = await fetch(GAS_URL, { method:"POST", headers:{"Content-Type":"text/plain"}, body:JSON.stringify(payload) });
     const json = await res.json();
     if (json.status === "ok") {
       document.getElementById("done-sub").textContent = datetime;

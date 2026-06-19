@@ -116,7 +116,7 @@
   <div class="right">
     <button class="hbtn" id="unsent-btn" onclick="showUnsent()">未送信 0件</button>
     <button class="hbtn" onclick="showHistory()">履歴</button>
-    <div class="maker-badge" id="header-maker" onclick="changeMaker()">未選択</div>
+    <div class="maker-badge" id="header-maker" onclick="confirmLogout()">未選択</div>
   </div>
 </header>
 
@@ -228,6 +228,20 @@
   <div class="item-list" id="history-list"></div>
   <div class="list-footer">
     <button class="btn-secondary" style="width:100%" onclick="goToQr()">QR読取に戻る</button>
+  </div>
+</div>
+
+<!-- モーダル：ログアウト確認 -->
+<div class="modal-overlay" id="modal-logout">
+  <div class="modal">
+    <div class="modal-title">ログアウト確認</div>
+    <div class="modal-body">
+      <div class="modal-msg">ログアウトしてメーカー選択に戻りますか？</div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('modal-logout')">キャンセル</button>
+      <button class="btn-ok danger" onclick="changeMaker()">ログアウト</button>
+    </div>
   </div>
 </div>
 
@@ -378,6 +392,10 @@ function confirmLogin() {
   loadJsQR(() => startCamera());
 }
 
+function confirmLogout() {
+  document.getElementById("modal-logout").classList.add("show");
+}
+
 function changeMaker() {
   stopCamera();
   currentMaker = null;
@@ -434,6 +452,8 @@ function startScan() {
         if (code.data === lastScanned && now - lastScannedTime < 3000) return;
         lastScanned = code.data; lastScannedTime = now;
         dbg("QR検出！ " + code.data.length + "文字");
+        vibrate();
+        beep();
         onQRDetected(code.data);
       }
     } catch(e) { dbg("スキャンエラー:" + e.message); }
@@ -471,6 +491,7 @@ function confirmSend() {
   const haikyu = document.getElementById("input-haikyu").value.trim();
   if (!seisan) { showToast("生産数を入力してください"); return; }
   if (!haikyu) { showToast("廃却数を入力してください"); return; }
+  if (parseInt(haikyu) > parseInt(seisan)) { showToast("廃却数が生産数を超えています"); return; }
   currentSeisan = seisan; currentHaikyu = haikyu;
   document.getElementById("modal-hinban").textContent = currentHinban;
   document.getElementById("modal-kotei").textContent  = currentKotei;
@@ -601,6 +622,26 @@ function showHistory() {
     });
   }
   showScreen("screen-history");
+}
+
+function vibrate() {
+  if (navigator.vibrate) navigator.vibrate(100);
+}
+
+function beep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 1200;
+    osc.type = "square";
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.15);
+  } catch(e) {}
 }
 
 function showScreen(id) {

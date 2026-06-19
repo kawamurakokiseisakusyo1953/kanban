@@ -15,7 +15,9 @@
   header { background: var(--card); border-bottom: 1px solid var(--border); padding: 14px 16px; display: flex; align-items: center; gap: 10px; }
   header .logo { width: 32px; height: 32px; background: var(--accent); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
   header h1 { font-size: 16px; font-weight: 700; }
-  header .maker-badge { margin-left: auto; background: var(--border); border-radius: 20px; padding: 4px 12px; font-size: 12px; color: var(--sub); cursor: pointer; }
+  header .right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  header .maker-badge { background: var(--border); border-radius: 20px; padding: 4px 12px; font-size: 12px; color: var(--sub); cursor: pointer; }
+  header .history-btn { background: var(--border); border-radius: 20px; padding: 4px 12px; font-size: 12px; color: var(--sub); cursor: pointer; border: none; }
   .screen { display: none; flex-direction: column; flex: 1; padding: 20px 16px; }
   .screen.active { display: flex; }
   .screen-title { font-size: 13px; color: var(--sub); letter-spacing: 0.1em; margin-bottom: 20px; }
@@ -56,6 +58,25 @@
   .done-detail { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 20px; width: 100%; margin-top: 8px; }
   .error-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; }
   .error-icon { width: 72px; height: 72px; background: rgba(248,113,113,0.15); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 36px; }
+  /* 確認ダイアログ */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; align-items: center; justify-content: center; padding: 24px; }
+  .modal-overlay.show { display: flex; }
+  .modal { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; width: 100%; max-width: 360px; }
+  .modal-title { font-size: 18px; font-weight: 700; margin-bottom: 16px; text-align: center; }
+  .modal-body { margin-bottom: 20px; }
+  .modal-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+  .modal-row:last-child { border-bottom: none; }
+  .modal-row .label { color: var(--sub); }
+  .modal-btns { display: flex; gap: 10px; }
+  .modal-btns .btn-cancel { flex: 1; background: var(--border); color: var(--text); border: none; border-radius: 10px; padding: 14px; font-size: 15px; font-weight: 600; cursor: pointer; }
+  .modal-btns .btn-ok { flex: 2; background: var(--accent); color: #fff; border: none; border-radius: 10px; padding: 14px; font-size: 15px; font-weight: 700; cursor: pointer; }
+  /* 履歴画面 */
+  .history-list { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+  .history-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .history-item .h-time { font-size: 11px; color: var(--sub); margin-bottom: 6px; }
+  .history-item .h-hinban { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  .history-item .h-nums { font-size: 13px; color: var(--sub); }
+  .history-empty { text-align: center; color: var(--sub); margin-top: 40px; font-size: 14px; }
   .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 10px 20px; border-radius: 20px; font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap; z-index: 999; }
   .toast.show { opacity: 1; }
   .debug-log { background: #111; color: #0f0; font-size: 11px; padding: 8px; border-radius: 8px; margin-top: 8px; max-height: 60px; overflow-y: auto; font-family: monospace; }
@@ -66,10 +87,13 @@
 <header>
   <div class="logo">📋</div>
   <h1>生産記録</h1>
-  <div class="maker-badge" id="header-maker" onclick="changeMaker()">メーカー未選択</div>
+  <div class="right">
+    <button class="history-btn" onclick="showHistory()">履歴</button>
+    <div class="maker-badge" id="header-maker" onclick="changeMaker()">未選択</div>
+  </div>
 </header>
 
-<!-- ログイン画面：最初からメーカー＋PW両方表示 -->
+<!-- ログイン画面 -->
 <div class="screen active" id="screen-login">
   <div class="screen-title">ログイン</div>
   <div class="login-card">
@@ -116,7 +140,7 @@
   </div>
   <div class="btn-row">
     <button class="btn-secondary" onclick="backToQr()">← やり直す</button>
-    <button class="btn-primary" style="flex:2;margin-top:0" onclick="submitData()">送信して次へ</button>
+    <button class="btn-primary" style="flex:2;margin-top:0" onclick="confirmSend()">送信して次へ</button>
   </div>
 </div>
 
@@ -147,6 +171,30 @@
   </div>
 </div>
 
+<!-- 履歴画面 -->
+<div class="screen" id="screen-history">
+  <div class="screen-title">送信履歴（直近20件）</div>
+  <div class="history-list" id="history-list"></div>
+  <button class="btn-secondary" style="margin-top:16px" onclick="backFromHistory()">← 戻る</button>
+</div>
+
+<!-- 送信確認モーダル -->
+<div class="modal-overlay" id="modal-confirm">
+  <div class="modal">
+    <div class="modal-title">送信確認</div>
+    <div class="modal-body">
+      <div class="modal-row"><span class="label">品番</span><span id="modal-hinban">—</span></div>
+      <div class="modal-row"><span class="label">工程</span><span id="modal-kotei">—</span></div>
+      <div class="modal-row"><span class="label">生産数</span><span id="modal-seisan">—</span></div>
+      <div class="modal-row"><span class="label">廃却数</span><span id="modal-haikyu">—</span></div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal()">キャンセル</button>
+      <button class="btn-ok" onclick="submitData()">送信する</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -161,10 +209,13 @@ let currentMaker = null;
 let currentQR = null;
 let currentHinban = null;
 let currentKotei = null;
+let currentSeisan = null;
+let currentHaikyu = null;
 let videoStream = null;
 let scanInterval = null;
 let lastScanned = "";
 let lastScannedTime = 0;
+let prevScreen = "screen-qr";
 
 function dbg(msg) {
   const el = document.getElementById("debug-log");
@@ -187,11 +238,7 @@ function loadJsQR(callback) {
   document.head.appendChild(script);
 }
 
-// ========================================
-// 起動：セレクト構築→記憶復元→自動ログイン
-// ========================================
 window.onload = () => {
-  // セレクトボックス構築
   const sel = document.getElementById("maker-select");
   MAKERS.forEach(m => {
     const opt = document.createElement("option");
@@ -200,14 +247,11 @@ window.onload = () => {
     sel.appendChild(opt);
   });
 
-  // 記憶を復元
   const savedMaker = localStorage.getItem("kanban_maker");
   const savedPw    = localStorage.getItem("kanban_pw");
-
   if (savedMaker) sel.value = savedMaker;
   if (savedPw)    document.getElementById("pw-input").value = savedPw;
 
-  // 両方一致すれば自動ログイン
   if (savedMaker && savedPw) {
     const maker = MAKERS.find(m => m.name === savedMaker && m.password === savedPw);
     if (maker) {
@@ -230,7 +274,6 @@ function confirmLogin() {
   if (!pw)        { showToast("パスワードを入力してください"); return; }
   const maker = MAKERS.find(m => m.name === makerName);
   if (!maker || pw !== maker.password) { showToast("パスワードが違います"); return; }
-
   localStorage.setItem("kanban_maker", makerName);
   localStorage.setItem("kanban_pw", pw);
   currentMaker = makerName;
@@ -244,7 +287,7 @@ function changeMaker() {
   currentMaker = null;
   localStorage.removeItem("kanban_maker");
   localStorage.removeItem("kanban_pw");
-  document.getElementById("header-maker").textContent = "メーカー未選択";
+  document.getElementById("header-maker").textContent = "未選択";
   document.getElementById("maker-select").value = "";
   document.getElementById("pw-input").value = "";
   showScreen("screen-login");
@@ -331,11 +374,27 @@ function onQRDetected(qr) {
   }, 500);
 }
 
-async function submitData() {
+// 送信確認モーダルを表示
+function confirmSend() {
   const seisan = document.getElementById("input-seisan").value.trim();
   const haikyu = document.getElementById("input-haikyu").value.trim();
   if (!seisan) { showToast("生産数を入力してください"); return; }
   if (!haikyu) { showToast("廃却数を入力してください"); return; }
+  currentSeisan = seisan;
+  currentHaikyu = haikyu;
+  document.getElementById("modal-hinban").textContent = currentHinban;
+  document.getElementById("modal-kotei").textContent  = currentKotei;
+  document.getElementById("modal-seisan").textContent = seisan;
+  document.getElementById("modal-haikyu").textContent = haikyu;
+  document.getElementById("modal-confirm").classList.add("show");
+}
+
+function closeModal() {
+  document.getElementById("modal-confirm").classList.remove("show");
+}
+
+async function submitData() {
+  closeModal();
   const now = new Date();
   const datetime = now.toLocaleString("ja-JP", {
     year:"numeric", month:"2-digit", day:"2-digit",
@@ -345,19 +404,22 @@ async function submitData() {
     maker: currentMaker,
     password: MAKERS.find(m => m.name === currentMaker)?.password,
     datetime, qr: currentQR, hinban: currentHinban, kotei: currentKotei,
-    seisan: parseInt(seisan), haikyu: parseInt(haikyu),
+    seisan: parseInt(currentSeisan), haikyu: parseInt(currentHaikyu),
   };
   showScreen("screen-sending");
   try {
     const res  = await fetch(GAS_URL, { method:"POST", headers:{"Content-Type":"text/plain"}, body:JSON.stringify(payload) });
     const json = await res.json();
     if (json.status === "ok") {
+      // 履歴に保存
+      saveHistory({ datetime, hinban: currentHinban, kotei: currentKotei, seisan: currentSeisan, haikyu: currentHaikyu, maker: currentMaker });
+
       document.getElementById("done-sub").textContent = datetime;
       document.getElementById("done-detail").innerHTML =
         `<div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:var(--sub);font-size:13px">品番</span><span style="font-weight:600">${currentHinban}</span></div>
          <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:var(--sub);font-size:13px">工程</span><span style="font-weight:600">${currentKotei}</span></div>
-         <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:var(--sub);font-size:13px">生産数</span><span style="font-weight:600">${seisan}</span></div>
-         <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:var(--sub);font-size:13px">廃却数</span><span style="font-weight:600">${haikyu}</span></div>`;
+         <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:var(--sub);font-size:13px">生産数</span><span style="font-weight:600">${currentSeisan}</span></div>
+         <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:var(--sub);font-size:13px">廃却数</span><span style="font-weight:600">${currentHaikyu}</span></div>`;
       showScreen("screen-done");
     } else {
       document.getElementById("error-msg").textContent = json.message || "不明なエラー";
@@ -367,6 +429,41 @@ async function submitData() {
     document.getElementById("error-msg").textContent = "通信エラー：" + err.message;
     showScreen("screen-error");
   }
+}
+
+// 履歴保存（直近20件）
+function saveHistory(entry) {
+  let hist = JSON.parse(localStorage.getItem("kanban_history") || "[]");
+  hist.unshift(entry);
+  if (hist.length > 20) hist = hist.slice(0, 20);
+  localStorage.setItem("kanban_history", JSON.stringify(hist));
+}
+
+// 履歴表示
+function showHistory() {
+  prevScreen = document.querySelector(".screen.active")?.id || "screen-qr";
+  const hist = JSON.parse(localStorage.getItem("kanban_history") || "[]");
+  const list = document.getElementById("history-list");
+  list.innerHTML = "";
+  if (hist.length === 0) {
+    list.innerHTML = '<div class="history-empty">履歴がありません</div>';
+  } else {
+    hist.forEach(h => {
+      const item = document.createElement("div");
+      item.className = "history-item";
+      item.innerHTML = `
+        <div class="h-time">${h.datetime}　${h.maker}</div>
+        <div class="h-hinban">${h.hinban}　<span style="font-size:13px;color:var(--sub)">工程 ${h.kotei}</span></div>
+        <div class="h-nums">生産数 ${h.seisan}　廃却数 ${h.haikyu}</div>
+      `;
+      list.appendChild(item);
+    });
+  }
+  showScreen("screen-history");
+}
+
+function backFromHistory() {
+  showScreen(prevScreen);
 }
 
 function showScreen(id) {

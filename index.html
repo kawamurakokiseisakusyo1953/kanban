@@ -329,7 +329,14 @@ function updateUnsentBadge() {
   count > 0 ? btn.classList.add("has-data") : btn.classList.remove("has-data");
 }
 
-function dbg(msg) { const el = document.getElementById("debug-log"); if (el) el.textContent = msg; }
+function dbg(msg) {
+  const el = document.getElementById("debug-log");
+  if (el) el.textContent = msg;
+}
+function dbgAppend(msg) {
+  const el = document.getElementById("debug-log");
+  if (el) el.textContent += " | " + msg;
+}
 
 function loadJsQR(callback) {
   if (typeof jsQR === "function") { callback(); return; }
@@ -641,11 +648,17 @@ function initAudio() {
 }
 
 function vibrate() {
-  if (navigator.vibrate) navigator.vibrate(500);
+  if (navigator.vibrate) {
+    const ok = navigator.vibrate(500);
+    dbgAppend("vib:" + ok);
+  } else {
+    dbgAppend("vib非対応");
+  }
 }
 
 function beep() {
-  if (!sharedAudioCtx) return;
+  if (!sharedAudioCtx) { dbgAppend("ctx無"); return; }
+  dbgAppend("state:" + sharedAudioCtx.state);
   try {
     const osc = sharedAudioCtx.createOscillator();
     const gain = sharedAudioCtx.createGain();
@@ -657,7 +670,8 @@ function beep() {
     gain.gain.exponentialRampToValueAtTime(0.001, sharedAudioCtx.currentTime + 0.15);
     osc.start(sharedAudioCtx.currentTime);
     osc.stop(sharedAudioCtx.currentTime + 0.15);
-  } catch(e) {}
+    dbgAppend("beep実行");
+  } catch(e) { dbgAppend("beepエラー:" + e.message); }
 }
 
 function showScreen(id) {

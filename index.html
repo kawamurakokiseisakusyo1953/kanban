@@ -378,6 +378,7 @@ window.addEventListener("beforeunload", (e) => {
 document.getElementById("pw-input").addEventListener("keydown", e => { if (e.key === "Enter") confirmLogin(); });
 
 function confirmLogin() {
+  initAudio();
   const makerName = document.getElementById("maker-select").value;
   const pw = document.getElementById("pw-input").value.trim();
   if (!makerName) { showToast("取引先を選択してください"); return; }
@@ -408,6 +409,7 @@ function changeMaker() {
 }
 
 async function startCamera() {
+  initAudio();
   dbg("カメラ起動中...");
   document.getElementById("qr-status").className = "qr-status";
   document.getElementById("qr-status").textContent = "カメラを起動中…";
@@ -624,23 +626,37 @@ function showHistory() {
   showScreen("screen-history");
 }
 
+let sharedAudioCtx = null;
+
+function initAudio() {
+  if (!sharedAudioCtx) {
+    try {
+      sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    } catch(e) {}
+  }
+  // iOS/Androidのブラウザはsuspended状態で始まることがあるためresume
+  if (sharedAudioCtx && sharedAudioCtx.state === "suspended") {
+    sharedAudioCtx.resume();
+  }
+}
+
 function vibrate() {
   if (navigator.vibrate) navigator.vibrate(500);
 }
 
 function beep() {
+  if (!sharedAudioCtx) return;
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
+    const osc = sharedAudioCtx.createOscillator();
+    const gain = sharedAudioCtx.createGain();
     osc.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(sharedAudioCtx.destination);
     osc.frequency.value = 1200;
     osc.type = "square";
-    gain.gain.setValueAtTime(0.3, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.15);
+    gain.gain.setValueAtTime(0.3, sharedAudioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, sharedAudioCtx.currentTime + 0.15);
+    osc.start(sharedAudioCtx.currentTime);
+    osc.stop(sharedAudioCtx.currentTime + 0.15);
   } catch(e) {}
 }
 

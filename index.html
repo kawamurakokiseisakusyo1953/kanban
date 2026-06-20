@@ -386,6 +386,7 @@ document.getElementById("pw-input").addEventListener("keydown", e => { if (e.key
 
 function confirmLogin() {
   initAudio();
+  if (navigator.vibrate) navigator.vibrate(1); // バイブ権限を事前有効化
   const makerName = document.getElementById("maker-select").value;
   const pw = document.getElementById("pw-input").value.trim();
   if (!makerName) { showToast("取引先を選択してください"); return; }
@@ -417,6 +418,7 @@ function changeMaker() {
 
 async function startCamera() {
   initAudio();
+  if (navigator.vibrate) navigator.vibrate(1);
   dbg("カメラ起動中...");
   document.getElementById("qr-status").className = "qr-status";
   document.getElementById("qr-status").textContent = "カメラを起動中…";

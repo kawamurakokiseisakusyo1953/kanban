@@ -372,11 +372,30 @@ window.onload = () => {
       currentMaker = savedMaker;
       document.getElementById("header-maker").textContent = currentMaker;
       showScreen("screen-qr");
-      loadJsQR(() => startCamera());
+      showWakeOverlay();
       return;
     }
   }
 };
+
+// 自動ログイン時、最初のタップでバイブ・音の権限を有効化してからカメラ起動
+function showWakeOverlay() {
+  const overlay = document.createElement("div");
+  overlay.id = "wake-overlay";
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(26,31,46,0.95);z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;";
+  overlay.innerHTML = `
+    <div style="font-size:40px">📷</div>
+    <div style="font-size:16px;color:var(--text);font-weight:600">画面をタップして開始</div>
+    <div style="font-size:13px;color:var(--sub)">通知音・バイブを有効にします</div>
+  `;
+  overlay.onclick = () => {
+    initAudio();
+    if (navigator.vibrate) navigator.vibrate(1);
+    overlay.remove();
+    loadJsQR(() => startCamera());
+  };
+  document.body.appendChild(overlay);
+}
 
 window.addEventListener("beforeunload", (e) => {
   if (getUnsent().length > 0) { e.preventDefault(); e.returnValue = ""; }
@@ -406,6 +425,7 @@ function confirmLogout() {
 }
 
 function changeMaker() {
+  closeModal("modal-logout");
   stopCamera();
   currentMaker = null;
   localStorage.removeItem("kanban_maker");

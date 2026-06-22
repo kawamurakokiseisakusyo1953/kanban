@@ -675,7 +675,7 @@ function showUnsent() {
       div.innerHTML = `
         <div class="i-time">${item.datetime}　${item.maker}</div>
         <div class="i-hinban">${item.hinban}　<span style="font-size:13px;color:var(--sub)">工程 ${item.kotei}</span></div>
-        <div class="i-nums">生産数 ${item.seisan}　廃却数 ${item.haikyu}</div>
+        <div class="i-nums">作業工程 ${item.sakugyoKotei || '—'}　生産数 ${item.seisan}　廃却数 ${item.haikyu}</div>
         <button class="btn-cancel-item" onclick="confirmDelete(${item.id})">取り消し</button>`;
       list.appendChild(div);
     });
@@ -755,7 +755,7 @@ function showHistory() {
         <div class="i-time">📅 読取 ${h.datetime}　${h.maker}</div>
         <div class="i-time">📤 送信 ${h.sentDatetime}</div>
         <div class="i-hinban">${h.hinban}　<span style="font-size:13px;color:var(--sub)">工程 ${h.kotei}</span></div>
-        <div class="i-nums">生産数 ${h.seisan}　廃却数 ${h.haikyu}</div>`;
+        <div class="i-nums">作業工程 ${h.sakugyoKotei || '—'}　生産数 ${h.seisan}　廃却数 ${h.haikyu}</div>`;
       list.appendChild(div);
     });
   }

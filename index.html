@@ -472,18 +472,10 @@ function confirmLogin() {
   if (!makerName) { showToast("取引先を選択してください"); return; }
   if (!pw) { showToast("パスワードを入力してください"); return; }
 
-  // ローディング表示
-  document.getElementById("login-btn").disabled = true;
-  document.getElementById("login-btn").style.opacity = "0.5";
-  document.getElementById("login-loading").style.display = "block";
-  document.getElementById("login-loading-msg").textContent = "マスタ読み込み中…";
+  showStartLoading("工程読み込み中…");
 
   fetchKoteiMaster(makerName, pw, (result) => {
-    // ローディング非表示
-    document.getElementById("login-btn").disabled = false;
-    document.getElementById("login-btn").style.opacity = "1";
-    document.getElementById("login-loading").style.display = "none";
-
+    hideStartLoading();
     if (!result) return;
     localStorage.setItem("kanban_maker", makerName);
     localStorage.setItem("kanban_pw", pw);

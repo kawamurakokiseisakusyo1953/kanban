@@ -302,12 +302,8 @@
 <script>
 const GAS_URL = "https://script.google.com/macros/s/AKfycbwhrISJ5NKxNsTMAmIfXUErRb6i2aOoRglKrseUhRNMjCZj_7k8qFWJpukIZtJfv1RFuw/exec";
 
-const MAKERS = [
-  { name: "山田鉄工所", password: "yamada" },
-  // { name: "〇〇製作所", password: "xxxxx" },
-];
-
 let currentMaker = null;
+let currentPassword = null;
 let currentQR = null;
 let currentHinban = null;
 let currentKotei = null;
@@ -363,29 +359,45 @@ function loadJsQR(callback) {
 }
 
 window.onload = () => {
-  const sel = document.getElementById("maker-select");
-  MAKERS.forEach(m => {
-    const opt = document.createElement("option");
-    opt.value = m.name; opt.textContent = m.name;
-    sel.appendChild(opt);
-  });
+  updateUnsentBadge();
   const savedMaker = localStorage.getItem("kanban_maker");
   const savedPw    = localStorage.getItem("kanban_pw");
-  if (savedMaker) sel.value = savedMaker;
-  if (savedPw)    document.getElementById("pw-input").value = savedPw;
-  updateUnsentBadge();
-  if (savedMaker && savedPw) {
-    const maker = MAKERS.find(m => m.name === savedMaker && m.password === savedPw);
-    if (maker) {
-      currentMaker = savedMaker;
-      document.getElementById("header-maker").textContent = currentMaker;
-      fetchKoteiMaster(currentMaker, () => {
-        showScreen("screen-qr");
-        showWakeOverlay();
+
+  // マスタからメーカー一覧を取得してドロップダウンを構築
+  fetch(GAS_URL + "?action=getMaster")
+    .then(r => r.json())
+    .then(json => {
+      if (json.status !== "ok") { showToast("マスタ取得失敗"); return; }
+      const sel = document.getElementById("maker-select");
+      sel.innerHTML = '<option value="">選択してください</option>';
+      json.makerList.forEach(name => {
+        const opt = document.createElement("option");
+        opt.value = name; opt.textContent = name;
+        sel.appendChild(opt);
       });
-      return;
-    }
-  }
+      if (savedMaker) sel.value = savedMaker;
+      if (savedPw)    document.getElementById("pw-input").value = savedPw;
+
+      // 自動ログイン
+      if (savedMaker && savedPw) {
+        currentMaker = savedMaker;
+        currentPassword = savedPw;
+        document.getElementById("header-maker").textContent = currentMaker;
+        fetchKoteiMaster(currentMaker, savedPw, () => {
+          showScreen("screen-qr");
+          showWakeOverlay();
+        });
+      }
+    })
+    .catch(() => {
+      showToast("マスタ取得エラー（ネット確認）");
+      // オフライン時：保存済みメーカーだけ表示
+      if (savedMaker) {
+        const sel = document.getElementById("maker-select");
+        sel.innerHTML = `<option value="${savedMaker}">${savedMaker}</option>`;
+        if (savedPw) document.getElementById("pw-input").value = savedPw;
+      }
+    });
 };
 
 // 自動ログイン時、最初のタップでバイブ・音の権限を有効化してからカメラ起動
@@ -420,13 +432,15 @@ function confirmLogin() {
   const pw = document.getElementById("pw-input").value.trim();
   if (!makerName) { showToast("取引先を選択してください"); return; }
   if (!pw) { showToast("パスワードを入力してください"); return; }
-  const maker = MAKERS.find(m => m.name === makerName);
-  if (!maker || pw !== maker.password) { showToast("パスワードが違います"); return; }
-  localStorage.setItem("kanban_maker", makerName);
-  localStorage.setItem("kanban_pw", pw);
-  currentMaker = makerName;
-  document.getElementById("header-maker").textContent = currentMaker;
-  fetchKoteiMaster(currentMaker, () => {
+
+  // マスタからパスワード・工程を取得して認証
+  fetchKoteiMaster(makerName, pw, (result) => {
+    if (!result) return; // エラー時はfetchKoteiMaster内でトースト表示
+    localStorage.setItem("kanban_maker", makerName);
+    localStorage.setItem("kanban_pw", pw);
+    currentMaker = makerName;
+    currentPassword = pw;
+    document.getElementById("header-maker").textContent = currentMaker;
     showScreen("screen-qr");
     loadJsQR(() => startCamera());
   });
@@ -440,6 +454,7 @@ function changeMaker() {
   closeModal("modal-logout");
   stopCamera();
   currentMaker = null;
+  currentPassword = null;
   localStorage.removeItem("kanban_maker");
   localStorage.removeItem("kanban_pw");
   document.getElementById("header-maker").textContent = "未選択";
@@ -531,27 +546,35 @@ function onQRDetected(qr) {
 }
 
 // 工程マスタをGASから取得してドロップダウンに反映
-function fetchKoteiMaster(maker, callback) {
+function fetchKoteiMaster(maker, pw, callback) {
   const url = GAS_URL + "?action=getMaster&maker=" + encodeURIComponent(maker);
   fetch(url)
     .then(r => r.json())
     .then(json => {
-      if (json.status === "ok") {
-        const sel = document.getElementById("input-sakugyo");
-        sel.innerHTML = '<option value="">選択してください</option>';
-        json.koteiList.forEach(k => {
-          const opt = document.createElement("option");
-          opt.value = k; opt.textContent = k;
-          sel.appendChild(opt);
-        });
-      } else {
-        showToast("工程マスタ取得失敗: " + json.message);
+      if (json.status !== "ok") {
+        showToast("マスタ取得失敗: " + json.message);
+        if (callback) callback(null);
+        return;
       }
-      if (callback) callback();
+      // パスワード確認
+      if (pw && json.password !== pw) {
+        showToast("パスワードが違います");
+        if (callback) callback(null);
+        return;
+      }
+      // 工程ドロップダウンを構築
+      const sel = document.getElementById("input-sakugyo");
+      sel.innerHTML = '<option value="">選択してください</option>';
+      json.koteiList.forEach(k => {
+        const opt = document.createElement("option");
+        opt.value = k; opt.textContent = k;
+        sel.appendChild(opt);
+      });
+      if (callback) callback(json);
     })
-    .catch(e => {
-      showToast("工程マスタ取得エラー");
-      if (callback) callback();
+    .catch(() => {
+      showToast("マスタ取得エラー（ネット確認）");
+      if (callback) callback(null);
     });
 }
 
@@ -578,7 +601,7 @@ function saveLocal() {
   const datetime = now.toLocaleString("ja-JP", { year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit", second:"2-digit" });
   const entry = {
     id: now.getTime(), datetime, maker: currentMaker,
-    password: MAKERS.find(m => m.name === currentMaker)?.password,
+    password: currentPassword,
     qr: currentQR, hinban: currentHinban, kotei: currentKotei,
     sakugyoKotei: currentSakugyoKotei,
     seisan: parseInt(currentSeisan), haikyu: parseInt(currentHaikyu),

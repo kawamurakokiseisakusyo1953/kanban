@@ -132,7 +132,13 @@
       <span class="field-label">パスワード</span>
       <input class="pw-input" type="password" id="pw-input" placeholder="パスワードを入力" autocomplete="off">
     </div>
-    <button class="btn-primary" onclick="confirmLogin()">決定</button>
+    <button class="btn-primary" id="login-btn" onclick="confirmLogin()">決定</button>
+    <div id="login-loading" style="display:none;text-align:center;padding:8px 0;">
+      <div style="display:flex;align-items:center;justify-content:center;gap:10px;">
+        <div class="spinner" style="width:24px;height:24px;border-width:2px;"></div>
+        <span id="login-loading-msg" style="font-size:14px;color:var(--sub);">マスタ読み込み中…</span>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -363,11 +369,14 @@ window.onload = () => {
   const savedMaker = localStorage.getItem("kanban_maker");
   const savedPw    = localStorage.getItem("kanban_pw");
 
+  // 起動時から全画面ローディング表示
+  showStartLoading("マスタ読み込み中…");
+
   // マスタからメーカー一覧を取得してドロップダウンを構築
   fetch(GAS_URL + "?action=getMaster")
     .then(r => r.json())
     .then(json => {
-      if (json.status !== "ok") { showToast("マスタ取得失敗"); return; }
+      if (json.status !== "ok") { hideStartLoading(); showToast("マスタ取得失敗"); return; }
       const sel = document.getElementById("maker-select");
       sel.innerHTML = '<option value="">選択してください</option>';
       json.makerList.forEach(name => {
@@ -383,15 +392,20 @@ window.onload = () => {
         currentMaker = savedMaker;
         currentPassword = savedPw;
         document.getElementById("header-maker").textContent = currentMaker;
-        fetchKoteiMaster(currentMaker, savedPw, () => {
+        updateStartLoading("工程読み込み中…");
+        fetchKoteiMaster(currentMaker, savedPw, (result) => {
+          hideStartLoading();
+          if (!result) return;
           showScreen("screen-qr");
           showWakeOverlay();
         });
+      } else {
+        hideStartLoading();
       }
     })
     .catch(() => {
+      hideStartLoading();
       showToast("マスタ取得エラー（ネット確認）");
-      // オフライン時：保存済みメーカーだけ表示
       if (savedMaker) {
         const sel = document.getElementById("maker-select");
         sel.innerHTML = `<option value="${savedMaker}">${savedMaker}</option>`;
@@ -399,6 +413,31 @@ window.onload = () => {
       }
     });
 };
+
+function showStartLoading(msg) {
+  let el = document.getElementById("start-loading");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "start-loading";
+    el.style.cssText = "position:fixed;inset:0;background:var(--bg);z-index:300;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;";
+    el.innerHTML = `
+      <div style="font-size:32px">📋</div>
+      <div class="spinner"></div>
+      <div id="start-loading-msg" style="font-size:14px;color:var(--sub);">${msg}</div>
+    `;
+    document.body.appendChild(el);
+  }
+}
+
+function updateStartLoading(msg) {
+  const el = document.getElementById("start-loading-msg");
+  if (el) el.textContent = msg;
+}
+
+function hideStartLoading() {
+  const el = document.getElementById("start-loading");
+  if (el) el.remove();
+}
 
 // 自動ログイン時、最初のタップでバイブ・音の権限を有効化してからカメラ起動
 function showWakeOverlay() {
@@ -433,9 +472,19 @@ function confirmLogin() {
   if (!makerName) { showToast("取引先を選択してください"); return; }
   if (!pw) { showToast("パスワードを入力してください"); return; }
 
-  // マスタからパスワード・工程を取得して認証
+  // ローディング表示
+  document.getElementById("login-btn").disabled = true;
+  document.getElementById("login-btn").style.opacity = "0.5";
+  document.getElementById("login-loading").style.display = "block";
+  document.getElementById("login-loading-msg").textContent = "マスタ読み込み中…";
+
   fetchKoteiMaster(makerName, pw, (result) => {
-    if (!result) return; // エラー時はfetchKoteiMaster内でトースト表示
+    // ローディング非表示
+    document.getElementById("login-btn").disabled = false;
+    document.getElementById("login-btn").style.opacity = "1";
+    document.getElementById("login-loading").style.display = "none";
+
+    if (!result) return;
     localStorage.setItem("kanban_maker", makerName);
     localStorage.setItem("kanban_pw", pw);
     currentMaker = makerName;
@@ -541,7 +590,7 @@ function onQRDetected(qr) {
     document.getElementById("input-haikyu").value = "";
     document.getElementById("input-sakugyo").value = "";
     showScreen("screen-input");
-    document.getElementById("input-seisan").focus();
+    document.getElementById("input-sakugyo").focus();
   }, 500);
 }
 

@@ -53,7 +53,10 @@
   .num-label { font-size: 13px; color: var(--sub); margin-bottom: 8px; display: block; }
   .num-input { width: 100%; background: var(--input-bg); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 28px; font-weight: 700; padding: 14px 16px; outline: none; text-align: center; }
   .num-input:focus { border-color: var(--accent); }
-  .btn-row { display: flex; gap: 10px; margin-top: 8px; }
+  .check-wrap { display: flex; gap: 16px; margin-bottom: 12px; }
+  .check-item { display: flex; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 20px; cursor: pointer; flex: 1; }
+  .check-item input[type="checkbox"] { width: 22px; height: 22px; cursor: pointer; accent-color: var(--accent); flex-shrink: 0; }
+  .check-label { font-size: 15px; font-weight: 600; }
   .btn-secondary { background: var(--card); border: 1px solid var(--border); border-radius: 12px; color: var(--text); font-size: 15px; font-weight: 600; padding: 14px 20px; cursor: pointer; text-align: center; }
 
   .sending-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
@@ -175,6 +178,16 @@
     <label class="num-label">廃却数</label>
     <input class="num-input" type="number" id="input-haikyu" inputmode="numeric" min="0" placeholder="0">
   </div>
+  <div class="check-wrap">
+    <label class="check-item">
+      <input type="checkbox" id="check-shizai">
+      <span class="check-label">資材ゼロ</span>
+    </label>
+    <label class="check-item">
+      <input type="checkbox" id="check-sozai">
+      <span class="check-label">素材ゼロ</span>
+    </label>
+  </div>
   <div class="btn-row">
     <button class="btn-secondary" style="flex:1" onclick="backToQr()">やり直す</button>
     <button class="btn-primary" style="flex:2;margin-top:0" onclick="confirmSend()">ローカル保存</button>
@@ -267,6 +280,8 @@
       <div class="modal-row"><span class="label">作業工程</span><span id="modal-sakugyo">—</span></div>
       <div class="modal-row"><span class="label">生産数</span><span id="modal-seisan">—</span></div>
       <div class="modal-row"><span class="label">廃却数</span><span id="modal-haikyu">—</span></div>
+      <div class="modal-row"><span class="label">資材ゼロ</span><span id="modal-shizai">—</span></div>
+      <div class="modal-row"><span class="label">素材ゼロ</span><span id="modal-sozai">—</span></div>
     </div>
     <div class="modal-btns">
       <button class="btn-cancel" onclick="closeModal('modal-confirm')">キャンセル</button>
@@ -316,6 +331,8 @@ let currentKotei = null;
 let currentSeisan = null;
 let currentHaikyu = null;
 let currentSakugyoKotei = null;
+let currentShizai = false;
+let currentSozai = false;
 let videoStream = null;
 let scanInterval = null;
 let lastScanned = "";
@@ -581,6 +598,8 @@ function onQRDetected(qr) {
     document.getElementById("input-seisan").value = "";
     document.getElementById("input-haikyu").value = "";
     document.getElementById("input-sakugyo").value = "";
+    document.getElementById("check-shizai").checked = false;
+    document.getElementById("check-sozai").checked  = false;
     showScreen("screen-input");
     document.getElementById("input-sakugyo").focus();
   }, 500);
@@ -628,11 +647,15 @@ function confirmSend() {
   if (!haikyu) { showToast("廃却数を入力してください"); return; }
   if (parseInt(haikyu) > parseInt(seisan)) { showToast("廃却数が生産数を超えています"); return; }
   currentSeisan = seisan; currentHaikyu = haikyu; currentSakugyoKotei = sakugyo;
+  currentShizai = document.getElementById("check-shizai").checked;
+  currentSozai  = document.getElementById("check-sozai").checked;
   document.getElementById("modal-hinban").textContent = currentHinban;
   document.getElementById("modal-kotei").textContent  = currentKotei;
   document.getElementById("modal-sakugyo").textContent = sakugyo;
   document.getElementById("modal-seisan").textContent = seisan;
   document.getElementById("modal-haikyu").textContent = haikyu;
+  document.getElementById("modal-shizai").textContent = currentShizai ? "✅ あり" : "なし";
+  document.getElementById("modal-sozai").textContent  = currentSozai  ? "✅ あり" : "なし";
   document.getElementById("modal-confirm").classList.add("show");
 }
 
@@ -646,6 +669,8 @@ function saveLocal() {
     qr: currentQR, hinban: currentHinban, kotei: currentKotei,
     sakugyoKotei: currentSakugyoKotei,
     seisan: parseInt(currentSeisan), haikyu: parseInt(currentHaikyu),
+    shizai: currentShizai ? 0 : "",
+    sozai:  currentSozai  ? 0 : "",
   };
   const unsent = getUnsent();
   unsent.push(entry);
@@ -656,7 +681,9 @@ function saveLocal() {
      <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:var(--sub);font-size:13px">工程</span><span style="font-weight:600">${currentKotei}</span></div>
      <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:var(--sub);font-size:13px">作業工程</span><span style="font-weight:600">${currentSakugyoKotei}</span></div>
      <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:var(--sub);font-size:13px">生産数</span><span style="font-weight:600">${currentSeisan}</span></div>
-     <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:var(--sub);font-size:13px">廃却数</span><span style="font-weight:600">${currentHaikyu}</span></div>`;
+     <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:var(--sub);font-size:13px">廃却数</span><span style="font-weight:600">${currentHaikyu}</span></div>
+     <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:var(--sub);font-size:13px">資材ゼロ</span><span style="font-weight:600">${currentShizai ? "✅" : "—"}</span></div>
+     <div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:var(--sub);font-size:13px">素材ゼロ</span><span style="font-weight:600">${currentSozai ? "✅" : "—"}</span></div>`;
   showScreen("screen-done");
 }
 
@@ -676,6 +703,7 @@ function showUnsent() {
         <div class="i-time">${item.datetime}　${item.maker}</div>
         <div class="i-hinban">${item.hinban}　<span style="font-size:13px;color:var(--sub)">工程 ${item.kotei}</span></div>
         <div class="i-nums">作業工程 ${item.sakugyoKotei || '—'}　生産数 ${item.seisan}　廃却数 ${item.haikyu}</div>
+        <div class="i-nums">資材ゼロ ${item.shizai === 0 ? "✅" : "—"}　素材ゼロ ${item.sozai === 0 ? "✅" : "—"}</div>
         <button class="btn-cancel-item" onclick="confirmDelete(${item.id})">取り消し</button>`;
       list.appendChild(div);
     });
@@ -755,7 +783,8 @@ function showHistory() {
         <div class="i-time">📅 読取 ${h.datetime}　${h.maker}</div>
         <div class="i-time">📤 送信 ${h.sentDatetime}</div>
         <div class="i-hinban">${h.hinban}　<span style="font-size:13px;color:var(--sub)">工程 ${h.kotei}</span></div>
-        <div class="i-nums">作業工程 ${h.sakugyoKotei || '—'}　生産数 ${h.seisan}　廃却数 ${h.haikyu}</div>`;
+        <div class="i-nums">作業工程 ${h.sakugyoKotei || '—'}　生産数 ${h.seisan}　廃却数 ${h.haikyu}</div>
+        <div class="i-nums">資材ゼロ ${h.shizai === 0 ? "✅" : "—"}　素材ゼロ ${h.sozai === 0 ? "✅" : "—"}</div>`;
       list.appendChild(div);
     });
   }

@@ -662,7 +662,8 @@ function confirmSend() {
 function saveLocal() {
   closeModal("modal-confirm");
   const now = new Date();
-  const datetime = now.toLocaleString("ja-JP", { year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit", second:"2-digit" });
+  const pad = n => String(n).padStart(2, '0');
+  const datetime = now.getFullYear() + '/' + pad(now.getMonth()+1) + '/' + pad(now.getDate()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
   const entry = {
     id: now.getTime(), datetime, maker: currentMaker,
     password: currentPassword,
@@ -749,7 +750,9 @@ async function bulkSend() {
       const json = await res.json();
       if (json.status === "ok") {
         successCount++;
-        const sentDatetime = new Date().toLocaleString("ja-JP", { year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit", second:"2-digit" });
+        const now2 = new Date();
+        const pad2 = n => String(n).padStart(2, '0');
+        const sentDatetime = now2.getFullYear() + '/' + pad2(now2.getMonth()+1) + '/' + pad2(now2.getDate()) + ' ' + pad2(now2.getHours()) + ':' + pad2(now2.getMinutes()) + ':' + pad2(now2.getSeconds());
         addHistory({ ...item, sentDatetime });
       } else {
         failCount++; remaining.push(item);

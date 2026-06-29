@@ -58,6 +58,7 @@
   .check-item input[type="checkbox"] { width: 22px; height: 22px; cursor: pointer; accent-color: var(--accent); flex-shrink: 0; }
   .check-label { font-size: 15px; font-weight: 600; }
   .btn-secondary { background: var(--card); border: 1px solid var(--border); border-radius: 12px; color: var(--text); font-size: 15px; font-weight: 600; padding: 14px 20px; cursor: pointer; text-align: center; }
+  .input-footer { position: sticky; bottom: 0; background: var(--bg); padding: 12px 0 8px 0; display: flex; gap: 10px; }
 
   .sending-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
   .spinner { width: 48px; height: 48px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
@@ -188,9 +189,9 @@
   <input type="checkbox" id="check-sozai" style="display:none">
   <div class="num-input-wrap">
     <label class="num-label">備考 <span style="font-size:13px;color:var(--sub);font-weight:400">（任意）</span></label>
-    <input class="num-input" type="text" id="input-biko" style="font-size:18px;font-weight:400;text-align:left;" placeholder="自由入力">
-  </div>
-  <div class="btn-row">
+    <input class="num-input" type="text" id="input-biko" inputmode="latin" autocomplete="off" autocorrect="off" autocapitalize="off" style="font-size:18px;font-weight:400;text-align:left;" placeholder="自由入力">
+
+  <div class="input-footer">
     <button class="btn-secondary" style="flex:1" onclick="backToQr()">やり直す</button>
     <button class="btn-primary" style="flex:2;margin-top:0" onclick="confirmSend()">ローカル保存</button>
   </div>

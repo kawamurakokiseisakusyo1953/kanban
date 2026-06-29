@@ -239,6 +239,8 @@
           <button class="kb-key" onclick="kbInput('3')">3</button>
           <button class="kb-key" onclick="kbInput('4')">4</button>
           <button class="kb-key" onclick="kbInput('5')">5</button>
+        </div>
+        <div class="kb-row">
           <button class="kb-key" onclick="kbInput('6')">6</button>
           <button class="kb-key" onclick="kbInput('7')">7</button>
           <button class="kb-key" onclick="kbInput('8')">8</button>
@@ -251,7 +253,9 @@
           <button class="kb-key" onclick="kbInput('/')">／</button>
           <button class="kb-key" onclick="kbInput('(')">（</button>
           <button class="kb-key" onclick="kbInput(')')">）</button>
-          <button class="kb-key" onclick="kbInput(' ')">space</button>
+        </div>
+        <div class="kb-row">
+          <button class="kb-key kb-wide" onclick="kbInput(' ')">␣</button>
           <button class="kb-key kb-wide" onclick="kbDelete()">⌫</button>
         </div>
       </div>
@@ -263,7 +267,7 @@
         <div class="kb-row" id="alpha-row-4"></div>
         <div class="kb-row">
           <button class="kb-key kb-wide" id="shift-btn" onclick="toggleShift()" style="background:var(--border);">⇧</button>
-          <button class="kb-key" onclick="kbInput(' ')">space</button>
+          <button class="kb-key kb-wide" onclick="kbInput(' ')">␣</button>
           <button class="kb-key kb-wide" onclick="kbDelete()">⌫</button>
         </div>
       </div>
@@ -280,18 +284,18 @@
         <div class="kb-row" id="kana-row-ra"></div>
         <div class="kb-row" id="kana-row-wa"></div>
         <div class="kb-row">
-          <button class="kb-key kb-wide" id="dakuten-btn" onclick="toggleDakuten()">゛</button>
-          <button class="kb-key kb-wide" id="handakuten-btn" onclick="toggleHandakuten()">゜</button>
-          <button class="kb-key kb-wide" id="kogaki-btn" onclick="toggleKogaki()">小</button>
-          <button class="kb-key" onclick="kbInput(' ')">space</button>
-          <button class="kb-key kb-wide" onclick="kbDelete()">⌫</button>
-        </div>
-        <div class="kb-row">
+          <button class="kb-key" onclick="kbInput('ん')">ん</button>
           <button class="kb-key" onclick="kbInput('ー')">ー</button>
           <button class="kb-key" onclick="kbInput('、')">、</button>
           <button class="kb-key" onclick="kbInput('。')">。</button>
           <button class="kb-key" onclick="kbInput('・')">・</button>
-          <button class="kb-key" onclick="kbInput('ん')">ん</button>
+        </div>
+        <div class="kb-row">
+          <button class="kb-key kb-wide" id="dakuten-btn" onclick="toggleDakuten()">゛</button>
+          <button class="kb-key kb-wide" id="handakuten-btn" onclick="toggleHandakuten()">゜</button>
+          <button class="kb-key kb-wide" id="kogaki-btn" onclick="toggleKogaki()">小</button>
+          <button class="kb-key kb-wide" onclick="kbInput(' ')">␣</button>
+          <button class="kb-key kb-wide" onclick="kbDelete()">⌫</button>
         </div>
       </div>
     </div>

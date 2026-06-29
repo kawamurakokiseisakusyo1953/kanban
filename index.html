@@ -147,37 +147,13 @@
 
 <!-- QR読取 -->
 <div class="screen" id="screen-qr">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-    <div class="screen-title" style="margin-bottom:0">かんばんを読み取ってください</div>
-    <div style="display:flex;background:var(--border);border-radius:20px;padding:3px;gap:2px;">
-      <button id="mode-camera-btn" onclick="setMode('camera')" style="border:none;border-radius:16px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;background:var(--accent);color:#fff;">📷 カメラ</button>
-      <button id="mode-scanner-btn" onclick="setMode('scanner')" style="border:none;border-radius:16px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;background:transparent;color:var(--sub);">🔫 スキャナー</button>
-    </div>
+  <div class="screen-title">かんばんを読み取ってください</div>
+  <div class="qr-area">
+    <video id="qr-video" playsinline autoplay muted></video>
+    <canvas id="qr-canvas"></canvas>
+    <div class="qr-frame-overlay"><div class="qr-frame"></div></div>
   </div>
-
-  <!-- カメラモード -->
-  <div id="camera-mode">
-    <div class="qr-area">
-      <video id="qr-video" playsinline autoplay muted></video>
-      <canvas id="qr-canvas"></canvas>
-      <div class="qr-frame-overlay"><div class="qr-frame"></div></div>
-    </div>
-    <div class="qr-status" id="qr-status">カメラを起動中…</div>
-  </div>
-
-  <!-- スキャナーモード -->
-  <div id="scanner-mode" style="display:none;">
-    <div style="background:var(--card);border:2px dashed var(--accent);border-radius:16px;padding:40px 20px;text-align:center;margin-bottom:16px;">
-      <div style="font-size:48px;margin-bottom:12px;">🔫</div>
-      <div style="font-size:16px;font-weight:600;margin-bottom:8px;">スキャナー待機中</div>
-      <div style="font-size:13px;color:var(--sub);">BLEスキャナーでかんばんQRを読み取ってください</div>
-    </div>
-    <input id="scanner-input" type="text" autocomplete="off" autocorrect="off" autocapitalize="off"
-      style="position:absolute;left:-9999px;opacity:0;width:1px;height:1px;"
-      placeholder="">
-    <div class="qr-status" id="scanner-status">スキャナーの読み取りを待っています…</div>
-  </div>
-
+  <div class="qr-status" id="qr-status">カメラを起動中…</div>
   <div class="debug-log" id="debug-log">起動待機中...</div>
 </div>
 
@@ -489,7 +465,7 @@ function showWakeOverlay() {
   overlay.id = "wake-overlay";
   overlay.style.cssText = "position:fixed;inset:0;background:rgba(26,31,46,0.95);z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;";
   overlay.innerHTML = `
-    <div style="font-size:40px">${currentMode === "scanner" ? "🔫" : "📷"}</div>
+    <div style="font-size:40px">📷</div>
     <div style="font-size:16px;color:var(--text);font-weight:600">画面をタップして開始</div>
     <div style="font-size:13px;color:var(--sub)">通知音・バイブを有効にします</div>
   `;
@@ -497,13 +473,7 @@ function showWakeOverlay() {
     initAudio();
     if (navigator.vibrate) navigator.vibrate(1);
     overlay.remove();
-    applyMode();
-    if (currentMode === "camera") {
-      loadJsQR(() => startCamera());
-    } else {
-      initScannerInput();
-      focusScannerInput();
-    }
+    loadJsQR(() => startCamera());
   };
   document.body.appendChild(overlay);
 }
@@ -533,13 +503,7 @@ function confirmLogin() {
     currentPassword = pw;
     document.getElementById("header-maker").textContent = currentMaker;
     showScreen("screen-qr");
-    applyMode();
-    if (currentMode === "camera") {
-      loadJsQR(() => startCamera());
-    } else {
-      initScannerInput();
-      focusScannerInput();
-    }
+    loadJsQR(() => startCamera());
   });
 }
 
@@ -561,7 +525,6 @@ function changeMaker() {
 }
 
 async function startCamera() {
-  if (currentMode === "scanner") { focusScannerInput(); return; }
   initAudio();
   if (navigator.vibrate) navigator.vibrate(1);
   dbg("カメラ起動中...");
@@ -881,83 +844,9 @@ function showScreen(id) {
   document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
   document.getElementById(id).classList.add("active");
 }
-// ========================================
-// スキャナーモード
-// ========================================
-let currentMode = localStorage.getItem("kanban_mode") || "camera";
-
-function setMode(mode) {
-  currentMode = mode;
-  localStorage.setItem("kanban_mode", mode);
-  applyMode();
-  if (mode === "camera") {
-    startCamera();
-  } else {
-    stopCamera();
-    focusScannerInput();
-  }
-}
-
-function applyMode() {
-  const isCamera = currentMode === "camera";
-  document.getElementById("camera-mode").style.display  = isCamera ? "block" : "none";
-  document.getElementById("scanner-mode").style.display = isCamera ? "none"  : "block";
-  document.getElementById("mode-camera-btn").style.background  = isCamera ? "var(--accent)" : "transparent";
-  document.getElementById("mode-camera-btn").style.color       = isCamera ? "#fff" : "var(--sub)";
-  document.getElementById("mode-scanner-btn").style.background = isCamera ? "transparent" : "var(--accent)";
-  document.getElementById("mode-scanner-btn").style.color      = isCamera ? "var(--sub)" : "#fff";
-}
-
-function focusScannerInput() {
-  const el = document.getElementById("scanner-input");
-  if (el) { el.value = ""; el.focus(); }
-}
-
-function initScannerInput() {
-  const el = document.getElementById("scanner-input");
-  if (!el) return;
-
-  el.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      const val = el.value.trim();
-      el.value = "";
-      if (val.length > 0) {
-        dbg("スキャナー入力: " + val.length + "文字");
-        vibrate();
-        beep();
-        onQRDetected(val);
-      }
-    }
-  });
-
-  // スキャナーモード中は常にフォーカスを維持
-  document.addEventListener("click", () => {
-    if (currentMode === "scanner" && document.getElementById("screen-qr").classList.contains("active")) {
-      focusScannerInput();
-    }
-  });
-}
-
-function goToQr() {
-  showScreen("screen-qr");
-  lastScanned = "";
-  applyMode();
-  if (currentMode === "camera") startCamera();
-  else focusScannerInput();
-}
-function backToQr() {
-  showScreen("screen-qr");
-  applyMode();
-  if (currentMode === "camera") startCamera();
-  else focusScannerInput();
-}
-function nextScan() {
-  showScreen("screen-qr");
-  lastScanned = "";
-  applyMode();
-  if (currentMode === "camera") startCamera();
-  else focusScannerInput();
-}
+function goToQr() { showScreen("screen-qr"); lastScanned = ""; startCamera(); }
+function backToQr() { showScreen("screen-qr"); startCamera(); }
+function nextScan() { showScreen("screen-qr"); lastScanned = ""; startCamera(); }
 function closeModal(id) { document.getElementById(id).classList.remove("show"); }
 function showToast(msg) {
   const t = document.getElementById("toast");

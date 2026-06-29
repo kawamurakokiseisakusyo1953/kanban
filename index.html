@@ -284,7 +284,6 @@
         <div class="kb-row" id="kana-row-ra"></div>
         <div class="kb-row" id="kana-row-wa"></div>
         <div class="kb-row">
-          <button class="kb-key" onclick="kbInput('ん')">ん</button>
           <button class="kb-key" onclick="kbInput('ー')">ー</button>
           <button class="kb-key" onclick="kbInput('、')">、</button>
           <button class="kb-key" onclick="kbInput('。')">。</button>
@@ -1002,7 +1001,7 @@ const KANA_ROWS = {
   ma: ['ま','み','む','め','も'],
   ya: ['や','ゆ','よ'],
   ra: ['ら','り','る','れ','ろ'],
-  wa: ['わ','を'],
+  wa: ['わ','を','ん'],
 };
 const DAKUTEN_MAP = {か:'が',き:'ぎ',く:'ぐ',け:'げ',こ:'ご',さ:'ざ',し:'じ',す:'ず',せ:'ぜ',そ:'ぞ',た:'だ',ち:'ぢ',つ:'づ',て:'で',と:'ど',は:'ば',ひ:'び',ふ:'ぶ',へ:'べ',ほ:'ぼ',う:'ゔ'};
 const HANDAKUTEN_MAP = {は:'ぱ',ひ:'ぴ',ふ:'ぷ',へ:'ぺ',ほ:'ぽ'};
@@ -1018,6 +1017,7 @@ function buildAlphaKeys() {
       const ch = isShift ? c : c.toLowerCase();
       const btn = document.createElement('button');
       btn.className = 'kb-key';
+      btn.style.cssText = 'flex:0 0 13%; max-width:13%;';
       btn.textContent = ch;
       btn.onclick = () => kbInput(ch);
       el.appendChild(btn);

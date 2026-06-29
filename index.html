@@ -1039,6 +1039,7 @@ function buildKanaKeys() {
       else if (kanaMode === 'kogaki' && KOGAKI_MAP[c]) ch = KOGAKI_MAP[c];
       const btn = document.createElement('button');
       btn.className = 'kb-key';
+      btn.style.cssText = 'flex:0 0 18%; max-width:18%;';
       btn.textContent = ch;
       btn.onclick = () => { kbInput(ch); kanaMode = 'normal'; buildKanaKeys(); };
       el.appendChild(btn);

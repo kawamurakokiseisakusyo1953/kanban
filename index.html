@@ -198,247 +198,108 @@
   <div class="num-input-wrap">
     <label class="num-label">備考 <span style="font-size:13px;color:var(--sub);font-weight:400">（任意）</span></label>
     <div style="background:var(--input-bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;min-height:52px;font-size:18px;font-weight:400;cursor:text;word-break:break-all;" id="biko-display" onclick="showCustomKeyboard()">
-      <span id="biko-text" style="color:var(--text)"></span><span id="biko-placeholder" style="color:var(--sub)">自由入力</span><span id="biko-cursor" style="display:none;width:2px;height:20px;background:var(--accent);margin-left:1px;vertical-align:middle;animation:blink 1s infinite;">|</span>
+      <span id="biko-text" style="color:var(--text)"></span><span id="biko-placeholder" style="color:var(--sub)">タップして入力</span>
     </div>
     <input type="hidden" id="input-biko">
-
-  <!-- カスタムキーボード（画面下部固定） -->
-  <div id="custom-keyboard" style="display:none;position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:2px solid var(--border);padding:10px;z-index:500;max-height:60vh;overflow-y:auto;">
-    <!-- タブ切り替え -->
-    <div style="display:flex;gap:6px;margin-bottom:10px;">
-      <button class="kb-tab active" id="tab-num" onclick="switchKbTab('num')">数字</button>
-      <button class="kb-tab" id="tab-alpha" onclick="switchKbTab('alpha')">英字</button>
-      <button class="kb-tab" id="tab-kana" onclick="switchKbTab('kana')">かな</button>
-    </div>
-    <!-- 数字 -->
-    <div id="kb-num" class="kb-panel">
-      <div class="kb-row">
-        <button class="kb-key" onclick="kbInput('1')">1</button>
-        <button class="kb-key" onclick="kbInput('2')">2</button>
-        <button class="kb-key" onclick="kbInput('3')">3</button>
-        <button class="kb-key" onclick="kbInput('4')">4</button>
-        <button class="kb-key" onclick="kbInput('5')">5</button>
-        <button class="kb-key" onclick="kbInput('6')">6</button>
-        <button class="kb-key" onclick="kbInput('7')">7</button>
-        <button class="kb-key" onclick="kbInput('8')">8</button>
-        <button class="kb-key" onclick="kbInput('9')">9</button>
-        <button class="kb-key" onclick="kbInput('0')">0</button>
-      </div>
-      <div class="kb-row">
-        <button class="kb-key" onclick="kbInput('.')">.</button>
-        <button class="kb-key" onclick="kbInput('-')">-</button>
-        <button class="kb-key" onclick="kbInput('/')">／</button>
-        <button class="kb-key" onclick="kbInput('(')">（</button>
-        <button class="kb-key" onclick="kbInput(')')">）</button>
-        <button class="kb-key" onclick="kbInput(' ')">space</button>
-        <button class="kb-key kb-wide" onclick="kbDelete()">⌫</button>
-      </div>
-    </div>
-    <!-- 英字 -->
-    <div id="kb-alpha" class="kb-panel" style="display:none;">
-      <div class="kb-row">
-        <button class="kb-key" onclick="kbInput('A')">A</button>
-        <button class="kb-key" onclick="kbInput('B')">B</button>
-        <button class="kb-key" onclick="kbInput('C')">C</button>
-        <button class="kb-key" onclick="kbInput('D')">D</button>
-        <button class="kb-key" onclick="kbInput('E')">E</button>
-        <button class="kb-key" onclick="kbInput('F')">F</button>
-        <button class="kb-key" onclick="kbInput('G')">G</button>
-      </div>
-      <div class="kb-row">
-        <button class="kb-key" onclick="kbInput('H')">H</button>
-        <button class="kb-key" onclick="kbInput('I')">I</button>
-        <button class="kb-key" onclick="kbInput('J')">J</button>
-        <button class="kb-key" onclick="kbInput('K')">K</button>
-        <button class="kb-key" onclick="kbInput('L')">L</button>
-        <button class="kb-key" onclick="kbInput('M')">M</button>
-        <button class="kb-key" onclick="kbInput('N')">N</button>
-      </div>
-      <div class="kb-row">
-        <button class="kb-key" onclick="kbInput('O')">O</button>
-        <button class="kb-key" onclick="kbInput('P')">P</button>
-        <button class="kb-key" onclick="kbInput('Q')">Q</button>
-        <button class="kb-key" onclick="kbInput('R')">R</button>
-        <button class="kb-key" onclick="kbInput('S')">S</button>
-        <button class="kb-key" onclick="kbInput('T')">T</button>
-        <button class="kb-key" onclick="kbInput('U')">U</button>
-      </div>
-      <div class="kb-row">
-        <button class="kb-key" onclick="kbInput('V')">V</button>
-        <button class="kb-key" onclick="kbInput('W')">W</button>
-        <button class="kb-key" onclick="kbInput('X')">X</button>
-        <button class="kb-key" onclick="kbInput('Y')">Y</button>
-        <button class="kb-key" onclick="kbInput('Z')">Z</button>
-        <button class="kb-key" onclick="kbInput(' ')">space</button>
-        <button class="kb-key kb-wide" onclick="kbDelete()">⌫</button>
-      </div>
-      <div class="kb-row">
-        <button class="kb-key" onclick="kbInput('a')">a</button>
-        <button class="kb-key" onclick="kbInput('b')">b</button>
-        <button class="kb-key" onclick="kbInput('c')">c</button>
-        <button class="kb-key" onclick="kbInput('d')">d</button>
-        <button class="kb-key" onclick="kbInput('e')">e</button>
-        <button class="kb-key" onclick="kbInput('f')">f</button>
-        <button class="kb-key" onclick="kbInput('g')">g</button>
-      </div>
-      <div class="kb-row">
-        <button class="kb-key" onclick="kbInput('h')">h</button>
-        <button class="kb-key" onclick="kbInput('i')">i</button>
-        <button class="kb-key" onclick="kbInput('j')">j</button>
-        <button class="kb-key" onclick="kbInput('k')">k</button>
-        <button class="kb-key" onclick="kbInput('l')">l</button>
-        <button class="kb-key" onclick="kbInput('m')">m</button>
-        <button class="kb-key" onclick="kbInput('n')">n</button>
-      </div>
-      <div class="kb-row">
-        <button class="kb-key" onclick="kbInput('o')">o</button>
-        <button class="kb-key" onclick="kbInput('p')">p</button>
-        <button class="kb-key" onclick="kbInput('q')">q</button>
-        <button class="kb-key" onclick="kbInput('r')">r</button>
-        <button class="kb-key" onclick="kbInput('s')">s</button>
-        <button class="kb-key" onclick="kbInput('t')">t</button>
-        <button class="kb-key" onclick="kbInput('u')">u</button>
-      </div>
-      <div class="kb-row">
-        <button class="kb-key" onclick="kbInput('v')">v</button>
-        <button class="kb-key" onclick="kbInput('w')">w</button>
-        <button class="kb-key" onclick="kbInput('x')">x</button>
-        <button class="kb-key" onclick="kbInput('y')">y</button>
-        <button class="kb-key" onclick="kbInput('z')">z</button>
-      </div>
-    </div>
-    <!-- かな -->
-    <div id="kb-kana" class="kb-panel" style="display:none;">
-      <div class="kb-row">
-        <button class="kb-key" onclick="kbInput('あ')">あ</button>
-        <button class="kb-key" onclick="kbInput('い')">い</button>
-        <button class="kb-key" onclick="kbInput('う')">う</button>
-        <button class="kb-key" onclick="kbInput('え')">え</button>
-        <button class="kb-key" onclick="kbInput('お')">お</button>
-      </div>
-      <div class="kb-row">
-        <button class="kb-key" onclick="kbInput('ぁ')">ぁ</button>
-        <button class="kb-key" onclick="kbInput('ぃ')">ぃ</button>
-        <button class="kb-key" onclick="kbInput('ぅ')">ぅ</button>
-        <button class="kb-key" onclick="kbInput('ぇ')">ぇ</button>
-        <button class="kb-key" onclick="kbInput('ぉ')">ぉ</button>
-      </div>
-      <div class="kb-row">
-        <button class="kb-key" onclick="kbInput('か')">か</button>
-        <button class="kb-key" onclick="kbInput('き')">き</button>
-        <button class="kb-key" onclick="kbInput('く')">く</button>
-        <button class="kb-key" onclick="kbInput('け')">け</button>
-        <button class="kb-key" onclick="kbInput('こ')">こ</button>
-      </div>
-      <div class="kb-row">
-        <button class="kb-key" onclick="kbInput('が')">が</button>
-        <button class="kb-key" onclick="kbInput('ぎ')">ぎ</button>
-        <button class="kb-key" onclick="kbInput('ぐ')">ぐ</button>
-        <button class="kb-key" onclick="kbInput('げ')">げ</button>
-        <button class="kb-key" onclick="kbInput('ご')">ご</button>
-      </div>
-      <div class="kb-row">
-        <button class="kb-key" onclick="kbInput('さ')">さ</button>
-        <button class="kb-key" onclick="kbInput('し')">し</button>
-        <button class="kb-key" onclick="kbInput('す')">す</button>
-        <button class="kb-key" onclick="kbInput('せ')">せ</button>
-        <button class="kb-key" onclick="kbInput('そ')">そ</button>
-      </div>
-      <div class="kb-row">
-        <button class="kb-key" onclick="kbInput('ざ')">ざ</button>
-        <button class="kb-key" onclick="kbInput('じ')">じ</button>
-        <button class="kb-key" onclick="kbInput('ず')">ず</button>
-        <button class="kb-key" onclick="kbInput('ぜ')">ぜ</button>
-        <button class="kb-key" onclick="kbInput('ぞ')">ぞ</button>
-      </div>
-      <div class="kb-row">
-        <button class="kb-key" onclick="kbInput('た')">た</button>
-        <button class="kb-key" onclick="kbInput('ち')">ち</button>
-        <button class="kb-key" onclick="kbInput('つ')">つ</button>
-        <button class="kb-key" onclick="kbInput('て')">て</button>
-        <button class="kb-key" onclick="kbInput('と')">と</button>
-      </div>
-      <div class="kb-row">
-        <button class="kb-key" onclick="kbInput('だ')">だ</button>
-        <button class="kb-key" onclick="kbInput('ぢ')">ぢ</button>
-        <button class="kb-key" onclick="kbInput('づ')">づ</button>
-        <button class="kb-key" onclick="kbInput('で')">で</button>
-        <button class="kb-key" onclick="kbInput('ど')">ど</button>
-      </div>
-      <div class="kb-row">
-        <button class="kb-key" onclick="kbInput('な')">な</button>
-        <button class="kb-key" onclick="kbInput('に')">に</button>
-        <button class="kb-key" onclick="kbInput('ぬ')">ぬ</button>
-        <button class="kb-key" onclick="kbInput('ね')">ね</button>
-        <button class="kb-key" onclick="kbInput('の')">の</button>
-      </div>
-      <div class="kb-row">
-        <button class="kb-key" onclick="kbInput('は')">は</button>
-        <button class="kb-key" onclick="kbInput('ひ')">ひ</button>
-        <button class="kb-key" onclick="kbInput('ふ')">ふ</button>
-        <button class="kb-key" onclick="kbInput('へ')">へ</button>
-        <button class="kb-key" onclick="kbInput('ほ')">ほ</button>
-      </div>
-      <div class="kb-row">
-        <button class="kb-key" onclick="kbInput('ば')">ば</button>
-        <button class="kb-key" onclick="kbInput('び')">び</button>
-        <button class="kb-key" onclick="kbInput('ぶ')">ぶ</button>
-        <button class="kb-key" onclick="kbInput('べ')">べ</button>
-        <button class="kb-key" onclick="kbInput('ぼ')">ぼ</button>
-      </div>
-      <div class="kb-row">
-        <button class="kb-key" onclick="kbInput('ぱ')">ぱ</button>
-        <button class="kb-key" onclick="kbInput('ぴ')">ぴ</button>
-        <button class="kb-key" onclick="kbInput('ぷ')">ぷ</button>
-        <button class="kb-key" onclick="kbInput('ぺ')">ぺ</button>
-        <button class="kb-key" onclick="kbInput('ぽ')">ぽ</button>
-      </div>
-      <div class="kb-row">
-        <button class="kb-key" onclick="kbInput('ま')">ま</button>
-        <button class="kb-key" onclick="kbInput('み')">み</button>
-        <button class="kb-key" onclick="kbInput('む')">む</button>
-        <button class="kb-key" onclick="kbInput('め')">め</button>
-        <button class="kb-key" onclick="kbInput('も')">も</button>
-      </div>
-      <div class="kb-row">
-        <button class="kb-key" onclick="kbInput('や')">や</button>
-        <button class="kb-key" onclick="kbInput('ゆ')">ゆ</button>
-        <button class="kb-key" onclick="kbInput('よ')">よ</button>
-        <button class="kb-key" onclick="kbInput('ゃ')">ゃ</button>
-        <button class="kb-key" onclick="kbInput('ゅ')">ゅ</button>
-        <button class="kb-key" onclick="kbInput('ょ')">ょ</button>
-      </div>
-      <div class="kb-row">
-        <button class="kb-key" onclick="kbInput('ら')">ら</button>
-        <button class="kb-key" onclick="kbInput('り')">り</button>
-        <button class="kb-key" onclick="kbInput('る')">る</button>
-        <button class="kb-key" onclick="kbInput('れ')">れ</button>
-        <button class="kb-key" onclick="kbInput('ろ')">ろ</button>
-      </div>
-      <div class="kb-row">
-        <button class="kb-key" onclick="kbInput('わ')">わ</button>
-        <button class="kb-key" onclick="kbInput('を')">を</button>
-        <button class="kb-key" onclick="kbInput('ん')">ん</button>
-        <button class="kb-key" onclick="kbInput('っ')">っ</button>
-        <button class="kb-key" onclick="kbInput('ー')">ー</button>
-      </div>
-      <div class="kb-row">
-        <button class="kb-key" onclick="kbInput('、')">、</button>
-        <button class="kb-key" onclick="kbInput('。')">。</button>
-        <button class="kb-key" onclick="kbInput('・')">・</button>
-        <button class="kb-key" onclick="kbInput(' ')">space</button>
-        <button class="kb-key kb-wide" onclick="kbDelete()">⌫</button>
-      </div>
-    </div>
-    <!-- 閉じるボタン -->
-    <div style="margin-top:8px;">
-      <button onclick="hideCustomKeyboard()" style="width:100%;background:var(--border);border:none;border-radius:8px;color:var(--text);padding:10px;font-size:14px;font-weight:600;cursor:pointer;">閉じる</button>
-    </div>
   </div>
 
   <div class="input-footer">
     <button class="btn-secondary" style="flex:1" onclick="backToQr()">やり直す</button>
     <button class="btn-primary" style="flex:2;margin-top:0" onclick="confirmSend()">ローカル保存</button>
+  </div>
+</div>
+
+<!-- 備考カスタムキーボード モーダル -->
+<div id="kb-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:500;align-items:center;justify-content:center;padding:16px;">
+  <div style="background:var(--card);border-radius:16px;width:100%;max-width:480px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;">
+    <!-- ヘッダー -->
+    <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+      <span style="font-size:15px;font-weight:700;">備考入力</span>
+      <button onclick="cancelCustomKeyboard()" style="background:none;border:none;color:var(--sub);font-size:20px;cursor:pointer;">✕</button>
+    </div>
+    <!-- 入力内容表示 -->
+    <div style="padding:12px 16px;background:var(--input-bg);border-bottom:1px solid var(--border);min-height:56px;font-size:20px;font-weight:400;word-break:break-all;display:flex;align-items:center;gap:2px;">
+      <span id="kb-text-display" style="color:var(--text);flex:1;"></span>
+      <span id="kb-placeholder" style="color:var(--sub);">ここに入力されます</span>
+      <span style="display:inline-block;width:2px;height:22px;background:var(--accent);animation:blink 1s infinite;flex-shrink:0;"></span>
+    </div>
+    <!-- タブ切り替え -->
+    <div style="display:flex;gap:6px;padding:10px 10px 6px;">
+      <button class="kb-tab active" id="tab-num" onclick="switchKbTab('num')">数字</button>
+      <button class="kb-tab" id="tab-alpha" onclick="switchKbTab('alpha')">英字</button>
+      <button class="kb-tab" id="tab-kana" onclick="switchKbTab('kana')">かな</button>
+    </div>
+    <!-- キーボード本体 -->
+    <div style="flex:1;overflow-y:auto;padding:0 10px 10px;">
+      <!-- 数字 -->
+      <div id="kb-num" class="kb-panel">
+        <div class="kb-row">
+          <button class="kb-key" onclick="kbInput('1')">1</button>
+          <button class="kb-key" onclick="kbInput('2')">2</button>
+          <button class="kb-key" onclick="kbInput('3')">3</button>
+          <button class="kb-key" onclick="kbInput('4')">4</button>
+          <button class="kb-key" onclick="kbInput('5')">5</button>
+          <button class="kb-key" onclick="kbInput('6')">6</button>
+          <button class="kb-key" onclick="kbInput('7')">7</button>
+          <button class="kb-key" onclick="kbInput('8')">8</button>
+          <button class="kb-key" onclick="kbInput('9')">9</button>
+          <button class="kb-key" onclick="kbInput('0')">0</button>
+        </div>
+        <div class="kb-row">
+          <button class="kb-key" onclick="kbInput('.')">.</button>
+          <button class="kb-key" onclick="kbInput('-')">-</button>
+          <button class="kb-key" onclick="kbInput('/')">／</button>
+          <button class="kb-key" onclick="kbInput('(')">（</button>
+          <button class="kb-key" onclick="kbInput(')')">）</button>
+          <button class="kb-key" onclick="kbInput(' ')">space</button>
+          <button class="kb-key kb-wide" onclick="kbDelete()">⌫</button>
+        </div>
+      </div>
+      <!-- 英字 -->
+      <div id="kb-alpha" class="kb-panel" style="display:none;">
+        <div class="kb-row" id="alpha-row-1"></div>
+        <div class="kb-row" id="alpha-row-2"></div>
+        <div class="kb-row" id="alpha-row-3"></div>
+        <div class="kb-row" id="alpha-row-4"></div>
+        <div class="kb-row">
+          <button class="kb-key kb-wide" id="shift-btn" onclick="toggleShift()" style="background:var(--border);">⇧</button>
+          <button class="kb-key" onclick="kbInput(' ')">space</button>
+          <button class="kb-key kb-wide" onclick="kbDelete()">⌫</button>
+        </div>
+      </div>
+      <!-- かな -->
+      <div id="kb-kana" class="kb-panel" style="display:none;">
+        <div class="kb-row" id="kana-row-a"></div>
+        <div class="kb-row" id="kana-row-ka"></div>
+        <div class="kb-row" id="kana-row-sa"></div>
+        <div class="kb-row" id="kana-row-ta"></div>
+        <div class="kb-row" id="kana-row-na"></div>
+        <div class="kb-row" id="kana-row-ha"></div>
+        <div class="kb-row" id="kana-row-ma"></div>
+        <div class="kb-row" id="kana-row-ya"></div>
+        <div class="kb-row" id="kana-row-ra"></div>
+        <div class="kb-row" id="kana-row-wa"></div>
+        <div class="kb-row">
+          <button class="kb-key kb-wide" id="dakuten-btn" onclick="toggleDakuten()">゛</button>
+          <button class="kb-key kb-wide" id="handakuten-btn" onclick="toggleHandakuten()">゜</button>
+          <button class="kb-key kb-wide" id="kogaki-btn" onclick="toggleKogaki()">小</button>
+          <button class="kb-key" onclick="kbInput(' ')">space</button>
+          <button class="kb-key kb-wide" onclick="kbDelete()">⌫</button>
+        </div>
+        <div class="kb-row">
+          <button class="kb-key" onclick="kbInput('ー')">ー</button>
+          <button class="kb-key" onclick="kbInput('、')">、</button>
+          <button class="kb-key" onclick="kbInput('。')">。</button>
+          <button class="kb-key" onclick="kbInput('・')">・</button>
+          <button class="kb-key" onclick="kbInput('ん')">ん</button>
+        </div>
+      </div>
+    </div>
+    <!-- フッター：キャンセル・決定 -->
+    <div style="display:flex;gap:10px;padding:10px 10px 14px;">
+      <button onclick="cancelCustomKeyboard()" style="flex:1;background:var(--border);border:none;border-radius:10px;color:var(--text);padding:14px;font-size:15px;font-weight:600;cursor:pointer;">キャンセル</button>
+      <button onclick="confirmCustomKeyboard()" style="flex:2;background:var(--accent);border:none;border-radius:10px;color:#fff;padding:14px;font-size:15px;font-weight:700;cursor:pointer;">決定</button>
+    </div>
   </div>
 </div>
 
@@ -1095,52 +956,129 @@ function backToQr() { showScreen("screen-qr"); startCamera(); }
 function nextScan() { showScreen("screen-qr"); lastScanned = ""; startCamera(); }
 function closeModal(id) { document.getElementById(id).classList.remove("show"); }
 // ========================================
-// カスタムキーボード
+// カスタムキーボード（モーダル式）
 // ========================================
 let bikoValue = "";
+let bikoDraft = ""; // モーダル内の一時入力値
 
 function showCustomKeyboard() {
-  document.getElementById("custom-keyboard").style.display = "block";
-  document.getElementById("biko-cursor").style.display = "inline-block";
-  document.getElementById("biko-display").style.borderColor = "var(--accent)";
-  updateBikoDisplay();
+  bikoDraft = bikoValue; // 現在の値を引き継ぐ
+  updateKbDisplay();
+  document.getElementById("kb-modal-overlay").style.display = "flex";
+  switchKbTab("num"); // 数字タブをデフォルトに
 }
 
 function hideCustomKeyboard() {
-  document.getElementById("custom-keyboard").style.display = "none";
-  document.getElementById("biko-cursor").style.display = "none";
-  document.getElementById("biko-display").style.borderColor = "var(--border)";
-  document.getElementById("input-biko").value = bikoValue;
+  document.getElementById("kb-modal-overlay").style.display = "none";
 }
 
-// 他の項目タップでキーボードを閉じる
-document.addEventListener("click", (e) => {
-  const kb = document.getElementById("custom-keyboard");
-  const display = document.getElementById("biko-display");
-  if (kb && display && !kb.contains(e.target) && !display.contains(e.target)) {
-    if (kb.style.display !== "none") hideCustomKeyboard();
-  }
-});
+function cancelCustomKeyboard() {
+  bikoDraft = bikoValue; // 変更を破棄
+  hideCustomKeyboard();
+}
+
+function confirmCustomKeyboard() {
+  bikoValue = bikoDraft;
+  document.getElementById("input-biko").value = bikoValue;
+  updateBikoDisplay();
+  hideCustomKeyboard();
+}
+
+let isShift = false;
+let kanaMode = "normal";
+
+const ALPHA_KEYS = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z'];
+const KANA_ROWS = {
+  a:  ['あ','い','う','え','お'],
+  ka: ['か','き','く','け','こ'],
+  sa: ['さ','し','す','せ','そ'],
+  ta: ['た','ち','つ','て','と'],
+  na: ['な','に','ぬ','ね','の'],
+  ha: ['は','ひ','ふ','へ','ほ'],
+  ma: ['ま','み','む','め','も'],
+  ya: ['や','ゆ','よ'],
+  ra: ['ら','り','る','れ','ろ'],
+  wa: ['わ','を'],
+};
+const DAKUTEN_MAP = {か:'が',き:'ぎ',く:'ぐ',け:'げ',こ:'ご',さ:'ざ',し:'じ',す:'ず',せ:'ぜ',そ:'ぞ',た:'だ',ち:'ぢ',つ:'づ',て:'で',と:'ど',は:'ば',ひ:'び',ふ:'ぶ',へ:'べ',ほ:'ぼ',う:'ゔ'};
+const HANDAKUTEN_MAP = {は:'ぱ',ひ:'ぴ',ふ:'ぷ',へ:'ぺ',ほ:'ぽ'};
+const KOGAKI_MAP = {あ:'ぁ',い:'ぃ',う:'ぅ',え:'ぇ',お:'ぉ',つ:'っ',や:'ゃ',ゆ:'ゅ',よ:'ょ'};
+
+function buildAlphaKeys() {
+  const rows = [ALPHA_KEYS.slice(0,7), ALPHA_KEYS.slice(7,14), ALPHA_KEYS.slice(14,21), ALPHA_KEYS.slice(21,26)];
+  rows.forEach((row, i) => {
+    const el = document.getElementById('alpha-row-' + (i+1));
+    if (!el) return;
+    el.innerHTML = '';
+    row.forEach(c => {
+      const ch = isShift ? c : c.toLowerCase();
+      const btn = document.createElement('button');
+      btn.className = 'kb-key';
+      btn.textContent = ch;
+      btn.onclick = () => kbInput(ch);
+      el.appendChild(btn);
+    });
+  });
+  const sb = document.getElementById('shift-btn');
+  if (sb) { sb.style.background = isShift ? 'var(--accent)' : 'var(--border)'; sb.style.color = isShift ? '#fff' : 'var(--text)'; }
+}
+
+function buildKanaKeys() {
+  Object.entries(KANA_ROWS).forEach(([row, chars]) => {
+    const el = document.getElementById('kana-row-' + row);
+    if (!el) return;
+    el.innerHTML = '';
+    chars.forEach(c => {
+      let ch = c;
+      if (kanaMode === 'dakuten' && DAKUTEN_MAP[c]) ch = DAKUTEN_MAP[c];
+      else if (kanaMode === 'handakuten' && HANDAKUTEN_MAP[c]) ch = HANDAKUTEN_MAP[c];
+      else if (kanaMode === 'kogaki' && KOGAKI_MAP[c]) ch = KOGAKI_MAP[c];
+      const btn = document.createElement('button');
+      btn.className = 'kb-key';
+      btn.textContent = ch;
+      btn.onclick = () => { kbInput(ch); kanaMode = 'normal'; buildKanaKeys(); };
+      el.appendChild(btn);
+    });
+  });
+  const db = document.getElementById('dakuten-btn');
+  const hb = document.getElementById('handakuten-btn');
+  const kb2 = document.getElementById('kogaki-btn');
+  if (db) { db.style.background = kanaMode==='dakuten' ? 'var(--accent)' : 'var(--border)'; db.style.color = kanaMode==='dakuten' ? '#fff' : 'var(--text)'; }
+  if (hb) { hb.style.background = kanaMode==='handakuten' ? 'var(--accent)' : 'var(--border)'; hb.style.color = kanaMode==='handakuten' ? '#fff' : 'var(--text)'; }
+  if (kb2) { kb2.style.background = kanaMode==='kogaki' ? 'var(--accent)' : 'var(--border)'; kb2.style.color = kanaMode==='kogaki' ? '#fff' : 'var(--text)'; }
+}
+
+function toggleShift() { isShift = !isShift; buildAlphaKeys(); }
+function toggleDakuten() { kanaMode = kanaMode==='dakuten' ? 'normal' : 'dakuten'; buildKanaKeys(); }
+function toggleHandakuten() { kanaMode = kanaMode==='handakuten' ? 'normal' : 'handakuten'; buildKanaKeys(); }
+function toggleKogaki() { kanaMode = kanaMode==='kogaki' ? 'normal' : 'kogaki'; buildKanaKeys(); }
 
 function switchKbTab(tab) {
   document.querySelectorAll(".kb-tab").forEach(t => t.classList.remove("active"));
   document.querySelectorAll(".kb-panel").forEach(p => p.style.display = "none");
   document.getElementById("tab-" + tab).classList.add("active");
   document.getElementById("kb-" + tab).style.display = "flex";
+  if (tab === 'alpha') buildAlphaKeys();
+  if (tab === 'kana') buildKanaKeys();
 }
 
 function kbInput(char) {
-  bikoValue += char;
-  updateBikoDisplay();
-  document.getElementById("input-biko").value = bikoValue;
+  bikoDraft += char;
+  updateKbDisplay();
 }
 
 function kbDelete() {
-  if (bikoValue.length > 0) {
-    bikoValue = bikoValue.slice(0, -1);
-    updateBikoDisplay();
-    document.getElementById("input-biko").value = bikoValue;
+  if (bikoDraft.length > 0) {
+    bikoDraft = bikoDraft.slice(0, -1);
+    updateKbDisplay();
   }
+}
+
+function updateKbDisplay() {
+  const el = document.getElementById("kb-text-display");
+  const ph = document.getElementById("kb-placeholder");
+  if (el) el.textContent = bikoDraft || "";
+  if (ph) ph.style.display = bikoDraft ? "none" : "inline";
 }
 
 function updateBikoDisplay() {
@@ -1152,11 +1090,10 @@ function updateBikoDisplay() {
 
 function resetBiko() {
   bikoValue = "";
+  bikoDraft = "";
   updateBikoDisplay();
   document.getElementById("input-biko").value = "";
-  document.getElementById("custom-keyboard").style.display = "none";
-  document.getElementById("biko-cursor").style.display = "none";
-  document.getElementById("biko-display").style.borderColor = "var(--border)";
+  hideCustomKeyboard();
 }
 
 function showToast(msg) {

@@ -159,7 +159,7 @@
 <div class="screen" id="screen-qr">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
     <div class="screen-title" style="margin-bottom:0">かんばんを読み取ってください</div>
-    <button onclick="showManualInput()" style="background:var(--border);border:none;border-radius:20px;padding:6px 14px;font-size:12px;color:var(--sub);cursor:pointer;white-space:nowrap;">✏️ 手入力</button>
+    <button onclick="showManualInput()" style="background:var(--border);border:none;border-radius:10px;padding:10px 18px;font-size:14px;color:var(--text);cursor:pointer;white-space:nowrap;font-weight:600;">✏️ 手入力</button>
   </div>
   <div class="qr-area">
     <video id="qr-video" playsinline autoplay muted></video>
@@ -356,7 +356,7 @@
 <div class="screen" id="screen-manual">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
     <div class="screen-title" style="margin-bottom:0">品番を手入力</div>
-    <button onclick="goToQr()" style="background:var(--border);border:none;border-radius:20px;padding:6px 14px;font-size:12px;color:var(--sub);cursor:pointer;">← 戻る</button>
+    <button onclick="goToQr()" style="background:var(--border);border:none;border-radius:10px;padding:10px 18px;font-size:14px;color:var(--text);cursor:pointer;font-weight:600;">← 戻る</button>
   </div>
 
   <!-- 品番入力 -->
@@ -1132,11 +1132,8 @@ function searchHinban(val) {
         const div = document.createElement("div");
         div.style.cssText = "padding:10px 16px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;";
         div.innerHTML = `
-          <div>
-            <div style="font-size:14px;font-weight:600;">${highlightMatch(h.hinban, val)}</div>
-            <div style="font-size:11px;color:var(--sub);">工程: ${h.kotei}　取引先: ${h.torihiki}</div>
-          </div>
-          <span style="color:var(--accent);font-size:16px;">›</span>`;
+          <div style="font-size:18px;font-weight:600;">${highlightMatch(h.hinban, val)}</div>
+          <span style="color:var(--accent);font-size:18px;flex-shrink:0;">›</span>`;
         div.onclick = () => { selectHinban(h); hideCustomKeyboard(); };
         kbList.appendChild(div);
       });
@@ -1152,11 +1149,8 @@ function searchHinban(val) {
         const div = document.createElement("div");
         div.style.cssText = "padding:14px 16px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;";
         div.innerHTML = `
-          <div>
-            <div style="font-size:15px;font-weight:600;">${highlightMatch(h.hinban, val)}</div>
-            <div style="font-size:12px;color:var(--sub);">工程: ${h.kotei}　取引先: ${h.torihiki}</div>
-          </div>
-          <span style="color:var(--accent);font-size:18px;">›</span>`;
+          <div style="font-size:18px;font-weight:600;">${highlightMatch(h.hinban, val)}</div>
+          <span style="color:var(--accent);font-size:18px;flex-shrink:0;">›</span>`;
         div.onclick = () => selectHinban(h);
         screenList.appendChild(div);
       });

@@ -1226,6 +1226,9 @@ function backToQr() {
   document.getElementById("input-haikyu").value = "";
   document.getElementById("seisan-text").textContent = "0";
   document.getElementById("haikyu-text").textContent = "0";
+  document.getElementById("input-sakugyo").value = "";
+  document.getElementById("check-shizai").checked = false;
+  resetBiko();
   showScreen("screen-qr"); startCamera();
 }
 function nextScan() { showScreen("screen-qr"); lastScanned = ""; startCamera(); }

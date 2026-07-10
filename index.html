@@ -1079,13 +1079,16 @@ function showManualInput() {
         } else {
           showToast("品番マスタ取得失敗: " + json.message);
         }
+        showManualKeyboard(); // 取得完了後にキーボードを開く
       })
       .catch(() => {
         document.getElementById("manual-loading").style.display = "none";
         showToast("品番マスタ取得エラー");
+        showManualKeyboard();
       });
+  } else {
+    setTimeout(() => showManualKeyboard(), 300);
   }
-  setTimeout(() => showManualKeyboard(), 300);
 }
 
 function showKbCandidates() {

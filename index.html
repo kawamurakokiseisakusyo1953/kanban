@@ -157,7 +157,10 @@
 
 <!-- QR読取 -->
 <div class="screen" id="screen-qr">
-  <div class="screen-title">かんばんを読み取ってください</div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+    <div class="screen-title" style="margin-bottom:0">かんばんを読み取ってください</div>
+    <button onclick="showManualInput()" style="background:var(--border);border:none;border-radius:20px;padding:6px 14px;font-size:12px;color:var(--sub);cursor:pointer;white-space:nowrap;">✏️ 手入力</button>
+  </div>
   <div class="qr-area">
     <video id="qr-video" playsinline autoplay muted></video>
     <canvas id="qr-canvas"></canvas>
@@ -304,6 +307,46 @@
       <button onclick="cancelCustomKeyboard()" style="flex:1;background:var(--border);border:none;border-radius:10px;color:var(--text);padding:14px;font-size:15px;font-weight:600;cursor:pointer;">キャンセル</button>
       <button onclick="confirmCustomKeyboard()" style="flex:2;background:var(--accent);border:none;border-radius:10px;color:#fff;padding:14px;font-size:15px;font-weight:700;cursor:pointer;">決定</button>
     </div>
+  </div>
+</div>
+
+<!-- 手入力モード -->
+<div class="screen" id="screen-manual">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+    <div class="screen-title" style="margin-bottom:0">品番を手入力</div>
+    <button onclick="goToQr()" style="background:var(--border);border:none;border-radius:20px;padding:6px 14px;font-size:12px;color:var(--sub);cursor:pointer;">← 戻る</button>
+  </div>
+
+  <!-- 品番入力 -->
+  <div class="num-input-wrap">
+    <label class="num-label">品番を入力（部分一致で検索）</label>
+    <input type="text" id="manual-hinban-input" class="num-input"
+      style="font-size:20px;font-weight:400;text-align:left;"
+      placeholder="例：095F6"
+      oninput="searchHinban(this.value)"
+      autocomplete="off" autocorrect="off" autocapitalize="off">
+  </div>
+
+  <!-- 候補リスト -->
+  <div id="hinban-candidates" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:12px;">
+    <div id="hinban-candidate-list"></div>
+  </div>
+
+  <!-- 選択結果表示 -->
+  <div id="manual-selected" style="display:none;">
+    <div class="info-card">
+      <div class="info-row"><span class="info-label">品番</span><span class="info-value" id="manual-disp-hinban">—</span></div>
+      <div class="info-row"><span class="info-label">工程</span><span class="info-value" id="manual-disp-kotei">—</span></div>
+      <div class="info-row"><span class="info-label">取引先コード</span><span class="info-value" id="manual-disp-torihiki">—</span></div>
+    </div>
+    <button class="btn-primary" onclick="proceedFromManual()">この品番で入力へ進む</button>
+  </div>
+
+  <div id="manual-empty" style="display:none;text-align:center;color:var(--sub);font-size:14px;margin-top:20px;">
+    品番マスタにデータがありません
+  </div>
+  <div id="manual-loading" style="display:none;text-align:center;color:var(--sub);font-size:14px;margin-top:20px;">
+    マスタ読み込み中…
   </div>
 </div>
 
@@ -955,6 +998,136 @@ function showScreen(id) {
   document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
   document.getElementById(id).classList.add("active");
 }
+// ========================================
+// 手入力モード
+// ========================================
+let hinbanMasterList = [];
+let selectedHinbanData = null;
+
+function showManualInput() {
+  stopCamera();
+  showScreen("screen-manual");
+  document.getElementById("manual-hinban-input").value = "";
+  document.getElementById("hinban-candidates").style.display = "none";
+  document.getElementById("manual-selected").style.display = "none";
+  document.getElementById("manual-empty").style.display = "none";
+
+  // 品番マスタを取得（未取得の場合のみ）
+  if (hinbanMasterList.length === 0) {
+    document.getElementById("manual-loading").style.display = "block";
+    fetch(GAS_URL + "?action=getHinban&maker=" + encodeURIComponent(currentMaker))
+      .then(r => r.json())
+      .then(json => {
+        document.getElementById("manual-loading").style.display = "none";
+        if (json.status === "ok") {
+          hinbanMasterList = json.hinbanList;
+          if (hinbanMasterList.length === 0) {
+            document.getElementById("manual-empty").style.display = "block";
+          }
+        } else {
+          showToast("品番マスタ取得失敗: " + json.message);
+        }
+      })
+      .catch(() => {
+        document.getElementById("manual-loading").style.display = "none";
+        showToast("品番マスタ取得エラー");
+      });
+  }
+  setTimeout(() => document.getElementById("manual-hinban-input").focus(), 300);
+}
+
+function searchHinban(val) {
+  document.getElementById("manual-selected").style.display = "none";
+  selectedHinbanData = null;
+
+  if (val.length < 2) {
+    document.getElementById("hinban-candidates").style.display = "none";
+    return;
+  }
+
+  const keyword = val.toUpperCase();
+  const filtered = hinbanMasterList.filter(h =>
+    h.hinban.toUpperCase().includes(keyword)
+  );
+
+  const list = document.getElementById("hinban-candidate-list");
+  list.innerHTML = "";
+
+  if (filtered.length === 0) {
+    document.getElementById("hinban-candidates").style.display = "none";
+    return;
+  }
+
+  filtered.slice(0, 10).forEach(h => {
+    const div = document.createElement("div");
+    div.style.cssText = "padding:14px 16px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;";
+    div.innerHTML = `
+      <div>
+        <div style="font-size:15px;font-weight:600;">${highlightMatch(h.hinban, val)}</div>
+        <div style="font-size:12px;color:var(--sub);">工程: ${h.kotei}　取引先: ${h.torihiki}</div>
+      </div>
+      <span style="color:var(--accent);font-size:18px;">›</span>`;
+    div.onclick = () => selectHinban(h);
+    list.appendChild(div);
+  });
+
+  // 最後のborder-bottomを消す
+  if (list.lastChild) list.lastChild.style.borderBottom = "none";
+  document.getElementById("hinban-candidates").style.display = "block";
+}
+
+function highlightMatch(text, keyword) {
+  const idx = text.toUpperCase().indexOf(keyword.toUpperCase());
+  if (idx === -1) return text;
+  return text.slice(0, idx) +
+    `<span style="color:var(--accent);font-weight:700;">${text.slice(idx, idx + keyword.length)}</span>` +
+    text.slice(idx + keyword.length);
+}
+
+function selectHinban(h) {
+  selectedHinbanData = h;
+  document.getElementById("hinban-candidates").style.display = "none";
+  document.getElementById("manual-hinban-input").value = h.hinban;
+  document.getElementById("manual-disp-hinban").textContent = h.hinban;
+  document.getElementById("manual-disp-kotei").textContent = h.kotei;
+  document.getElementById("manual-disp-torihiki").textContent = h.torihiki;
+  document.getElementById("manual-selected").style.display = "block";
+}
+
+function proceedFromManual() {
+  if (!selectedHinbanData) { showToast("品番を選択してください"); return; }
+
+  // QRテンプレートに埋め込む
+  const h = selectedHinbanData;
+  const template = "20110607      B1 00  80700             SG432-B0030              YA  70520    L541    0000050       0008    1-2阿11-02342 SG220260707         SG432-B0030                                    01B63202026071001  0007500080002026070712:0651020            000.0   20701702300 ";
+
+  // 取引先コード（21〜25桁、5文字右詰め）
+  const torihikiPad = h.torihiki.padStart(5, ' ');
+  // 品番（39〜63桁、25文字左詰め空白埋め）
+  const hinbanPad = h.hinban.padEnd(25, ' ').slice(0, 25);
+  // 工程（64〜65桁、2文字左詰め）
+  const koteiPad = h.kotei.padEnd(2, ' ').slice(0, 2);
+
+  const qr = template.slice(0, 21) + torihikiPad +
+              template.slice(26, 39) + hinbanPad +
+              koteiPad + template.slice(66);
+
+  // 通常のQR検出フローに流す
+  currentQR     = qr;
+  currentHinban = h.hinban;
+  currentKotei  = h.kotei;
+
+  document.getElementById("disp-hinban").textContent = currentHinban;
+  document.getElementById("disp-kotei").textContent  = currentKotei;
+  document.getElementById("input-seisan").value = "";
+  document.getElementById("input-haikyu").value = "";
+  document.getElementById("input-sakugyo").value = "";
+  document.getElementById("check-shizai").checked = false;
+  resetBiko();
+  showScreen("screen-input");
+  document.getElementById("input-sakugyo").focus();
+}
+
 function goToQr() { showScreen("screen-qr"); lastScanned = ""; startCamera(); }
 function backToQr() { showScreen("screen-qr"); startCamera(); }
 function nextScan() { showScreen("screen-qr"); lastScanned = ""; startCamera(); }

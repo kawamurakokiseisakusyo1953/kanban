@@ -1231,7 +1231,16 @@ function backToQr() {
   resetBiko();
   showScreen("screen-qr"); startCamera();
 }
-function nextScan() { showScreen("screen-qr"); lastScanned = ""; startCamera(); }
+function nextScan() {
+  document.getElementById("input-seisan").value = "";
+  document.getElementById("input-haikyu").value = "";
+  document.getElementById("seisan-text").textContent = "0";
+  document.getElementById("haikyu-text").textContent = "0";
+  document.getElementById("input-sakugyo").value = "";
+  document.getElementById("check-shizai").checked = false;
+  resetBiko();
+  showScreen("screen-qr"); lastScanned = ""; startCamera();
+}
 function closeModal(id) { document.getElementById(id).classList.remove("show"); }
 // ========================================
 // カスタムキーボード（モーダル式）

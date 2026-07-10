@@ -171,17 +171,29 @@
 </div>
 
 <!-- 数量入力 -->
+<div class="screen" id="screen-sakugyo">
+  <div class="screen-title">作業工程を選択してください</div>
+  <div class="info-card" style="margin-bottom:16px;">
+    <div class="info-row"><span class="info-label">品番</span><span class="info-value" id="disp-hinban2">—</span></div>
+    <div class="info-row"><span class="info-label">工程</span><span class="info-value" id="disp-kotei2">—</span></div>
+  </div>
+  <div class="num-input-wrap">
+    <select class="maker-select" id="input-sakugyo" style="font-size:20px;padding:18px;">
+      <option value="">選択してください</option>
+    </select>
+  </div>
+  <div class="input-footer">
+    <button class="btn-secondary" style="flex:1" onclick="backToQr()">やり直す</button>
+    <button class="btn-primary" style="flex:2;margin-top:0" onclick="goToInput()">次へ</button>
+  </div>
+</div>
+
 <div class="screen" id="screen-input">
   <div class="screen-title">数量を入力</div>
   <div class="info-card">
     <div class="info-row"><span class="info-label">品番</span><span class="info-value" id="disp-hinban">—</span></div>
     <div class="info-row"><span class="info-label">工程</span><span class="info-value" id="disp-kotei">—</span></div>
-  </div>
-  <div class="num-input-wrap">
-    <label class="num-label">作業工程</label>
-    <select class="maker-select" id="input-sakugyo" style="font-size:18px;padding:14px;">
-      <option value="">選択してください</option>
-    </select>
+    <div class="info-row"><span class="info-label">作業工程</span><span class="info-value" id="disp-sakugyo">—</span></div>
   </div>
   <div class="num-input-wrap">
     <label class="num-label">生産数</label>
@@ -214,7 +226,7 @@
   </div>
 
   <div class="input-footer">
-    <button class="btn-secondary" style="flex:1" onclick="backToQr()">やり直す</button>
+    <button class="btn-secondary" style="flex:1" onclick="backToSakugyo()">← 戻る</button>
     <button class="btn-primary" style="flex:2;margin-top:0" onclick="confirmSend()">ローカル保存</button>
   </div>
 </div>
@@ -711,6 +723,7 @@ function changeMaker() {
   stopCamera();
   currentMaker = null;
   currentPassword = null;
+  hinbanMasterList = []; // 品番マスタをリセット
   localStorage.removeItem("kanban_maker");
   localStorage.removeItem("kanban_pw");
   document.getElementById("header-maker").textContent = "未選択";
@@ -793,15 +806,16 @@ function onQRDetected(qr) {
     stopCamera();
     document.getElementById("disp-hinban").textContent = currentHinban;
     document.getElementById("disp-kotei").textContent  = currentKotei;
+    document.getElementById("disp-hinban2").textContent = currentHinban;
+    document.getElementById("disp-kotei2").textContent  = currentKotei;
+    document.getElementById("input-sakugyo").value = "";
     document.getElementById("input-seisan").value = "";
     document.getElementById("input-haikyu").value = "";
     document.getElementById("seisan-text").textContent = "0";
     document.getElementById("haikyu-text").textContent = "0";
-    document.getElementById("input-sakugyo").value = "";
     document.getElementById("check-shizai").checked = false;
     resetBiko();
-    showScreen("screen-input");
-    document.getElementById("input-sakugyo").focus();
+    showScreen("screen-sakugyo");
   }, 500);
 }
 
@@ -1065,30 +1079,29 @@ function showManualInput() {
   document.getElementById("manual-empty").style.display = "none";
 
   // 品番マスタを取得（未取得の場合のみ）
-  if (hinbanMasterList.length === 0) {
-    document.getElementById("manual-loading").style.display = "block";
-    fetch(GAS_URL + "?action=getHinban&maker=" + encodeURIComponent(currentMaker))
-      .then(r => r.json())
-      .then(json => {
-        document.getElementById("manual-loading").style.display = "none";
-        if (json.status === "ok") {
-          hinbanMasterList = json.hinbanList;
-          if (hinbanMasterList.length === 0) {
-            document.getElementById("manual-empty").style.display = "block";
-          }
-        } else {
-          showToast("品番マスタ取得失敗: " + json.message);
+  // 毎回マスタを再取得（メーカー切替対応）
+  hinbanMasterList = [];
+  document.getElementById("manual-loading").style.display = "block";
+  document.getElementById("manual-empty").style.display = "none";
+  fetch(GAS_URL + "?action=getHinban&maker=" + encodeURIComponent(currentMaker))
+    .then(r => r.json())
+    .then(json => {
+      document.getElementById("manual-loading").style.display = "none";
+      if (json.status === "ok") {
+        hinbanMasterList = json.hinbanList;
+        if (hinbanMasterList.length === 0) {
+          document.getElementById("manual-empty").style.display = "block";
         }
-        showManualKeyboard(); // 取得完了後にキーボードを開く
-      })
-      .catch(() => {
-        document.getElementById("manual-loading").style.display = "none";
-        showToast("品番マスタ取得エラー");
-        showManualKeyboard();
-      });
-  } else {
-    setTimeout(() => showManualKeyboard(), 300);
-  }
+      } else {
+        showToast("品番マスタ取得失敗: " + json.message);
+      }
+      showManualKeyboard();
+    })
+    .catch(() => {
+      document.getElementById("manual-loading").style.display = "none";
+      showToast("品番マスタ取得エラー");
+      showManualKeyboard();
+    });
 }
 
 function showKbCandidates() {
@@ -1220,13 +1233,27 @@ function proceedFromManual() {
 
   document.getElementById("disp-hinban").textContent = currentHinban;
   document.getElementById("disp-kotei").textContent  = currentKotei;
+  document.getElementById("disp-hinban2").textContent = currentHinban;
+  document.getElementById("disp-kotei2").textContent  = currentKotei;
   document.getElementById("input-seisan").value = "";
   document.getElementById("input-haikyu").value = "";
+  document.getElementById("seisan-text").textContent = "0";
+  document.getElementById("haikyu-text").textContent = "0";
   document.getElementById("input-sakugyo").value = "";
   document.getElementById("check-shizai").checked = false;
   resetBiko();
+  showScreen("screen-sakugyo");
+}
+
+function goToInput() {
+  const sakugyo = document.getElementById("input-sakugyo").value;
+  if (!sakugyo) { showToast("作業工程を選択してください"); return; }
+  document.getElementById("disp-sakugyo").textContent = sakugyo;
   showScreen("screen-input");
-  document.getElementById("input-sakugyo").focus();
+}
+
+function backToSakugyo() {
+  showScreen("screen-sakugyo");
 }
 
 function goToQr() { showScreen("screen-qr"); lastScanned = ""; startCamera(); }

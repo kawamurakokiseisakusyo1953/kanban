@@ -185,11 +185,17 @@
   </div>
   <div class="num-input-wrap">
     <label class="num-label">生産数</label>
-    <input class="num-input" type="number" id="input-seisan" inputmode="numeric" min="0" placeholder="0">
+    <div class="num-input" style="cursor:pointer;display:flex;align-items:center;justify-content:center;" id="disp-seisan" onclick="showNumKeyboard('seisan')">
+      <span id="seisan-text" style="color:var(--text)">0</span>
+    </div>
+    <input type="hidden" id="input-seisan">
   </div>
   <div class="num-input-wrap">
     <label class="num-label">廃却数</label>
-    <input class="num-input" type="number" id="input-haikyu" inputmode="numeric" min="0" placeholder="0">
+    <div class="num-input" style="cursor:pointer;display:flex;align-items:center;justify-content:center;" id="disp-haikyu" onclick="showNumKeyboard('haikyu')">
+      <span id="haikyu-text" style="color:var(--text)">0</span>
+    </div>
+    <input type="hidden" id="input-haikyu">
   </div>
   <div class="check-wrap">
     <label class="check-item">
@@ -210,6 +216,37 @@
   <div class="input-footer">
     <button class="btn-secondary" style="flex:1" onclick="backToQr()">やり直す</button>
     <button class="btn-primary" style="flex:2;margin-top:0" onclick="confirmSend()">ローカル保存</button>
+  </div>
+</div>
+
+<!-- 数字入力キーボード モーダル -->
+<div id="num-kb-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:500;align-items:center;justify-content:center;padding:16px;">
+  <div style="background:var(--card);border-radius:16px;width:100%;max-width:360px;overflow:hidden;">
+    <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+      <span id="num-kb-title" style="font-size:15px;font-weight:700;">生産数入力</span>
+      <button onclick="cancelNumKeyboard()" style="background:none;border:none;color:var(--sub);font-size:20px;cursor:pointer;">✕</button>
+    </div>
+    <div style="padding:16px;background:var(--input-bg);border-bottom:1px solid var(--border);text-align:center;font-size:36px;font-weight:700;min-height:72px;display:flex;align-items:center;justify-content:center;">
+      <span id="num-kb-display">0</span>
+    </div>
+    <div style="padding:12px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+      <button class="kb-key" style="padding:18px;font-size:22px;" onclick="numKbInput('7')">7</button>
+      <button class="kb-key" style="padding:18px;font-size:22px;" onclick="numKbInput('8')">8</button>
+      <button class="kb-key" style="padding:18px;font-size:22px;" onclick="numKbInput('9')">9</button>
+      <button class="kb-key" style="padding:18px;font-size:22px;" onclick="numKbInput('4')">4</button>
+      <button class="kb-key" style="padding:18px;font-size:22px;" onclick="numKbInput('5')">5</button>
+      <button class="kb-key" style="padding:18px;font-size:22px;" onclick="numKbInput('6')">6</button>
+      <button class="kb-key" style="padding:18px;font-size:22px;" onclick="numKbInput('1')">1</button>
+      <button class="kb-key" style="padding:18px;font-size:22px;" onclick="numKbInput('2')">2</button>
+      <button class="kb-key" style="padding:18px;font-size:22px;" onclick="numKbInput('3')">3</button>
+      <button class="kb-key" style="padding:18px;font-size:22px;grid-column:span 1;" onclick="numKbClear()">C</button>
+      <button class="kb-key" style="padding:18px;font-size:22px;" onclick="numKbInput('0')">0</button>
+      <button class="kb-key" style="padding:18px;font-size:22px;" onclick="numKbDelete()">⌫</button>
+    </div>
+    <div style="padding:0 12px 12px;display:flex;gap:8px;">
+      <button onclick="cancelNumKeyboard()" style="flex:1;background:var(--border);border:none;border-radius:10px;color:var(--text);padding:16px;font-size:15px;font-weight:600;cursor:pointer;">キャンセル</button>
+      <button onclick="confirmNumKeyboard()" style="flex:2;background:var(--accent);border:none;border-radius:10px;color:#fff;padding:16px;font-size:16px;font-weight:700;cursor:pointer;">決定</button>
+    </div>
   </div>
 </div>
 
@@ -753,6 +790,8 @@ function onQRDetected(qr) {
     document.getElementById("disp-kotei").textContent  = currentKotei;
     document.getElementById("input-seisan").value = "";
     document.getElementById("input-haikyu").value = "";
+    document.getElementById("seisan-text").textContent = "0";
+    document.getElementById("haikyu-text").textContent = "0";
     document.getElementById("input-sakugyo").value = "";
     document.getElementById("check-shizai").checked = false;
     resetBiko();
@@ -1273,12 +1312,26 @@ function switchKbTab(tab) {
 function kbInput(char) {
   bikoDraft += char;
   updateKbDisplay();
+  // 品番入力モードはリアルタイム検索
+  if (kbMode === "manual") {
+    manualInputValue = bikoDraft;
+    document.getElementById("manual-hinban-input").value = manualInputValue;
+    updateManualDisplay();
+    searchHinban(manualInputValue);
+  }
 }
 
 function kbDelete() {
   if (bikoDraft.length > 0) {
     bikoDraft = bikoDraft.slice(0, -1);
     updateKbDisplay();
+    // 品番入力モードはリアルタイム検索
+    if (kbMode === "manual") {
+      manualInputValue = bikoDraft;
+      document.getElementById("manual-hinban-input").value = manualInputValue;
+      updateManualDisplay();
+      searchHinban(manualInputValue);
+    }
   }
 }
 
@@ -1302,6 +1355,49 @@ function resetBiko() {
   updateBikoDisplay();
   document.getElementById("input-biko").value = "";
   hideCustomKeyboard();
+}
+
+// ========================================
+// 数字キーボード（生産数・廃却数）
+// ========================================
+let numKbTarget = "seisan"; // "seisan" or "haikyu"
+let numKbValue = "0";
+
+function showNumKeyboard(target) {
+  numKbTarget = target;
+  const current = document.getElementById("input-" + target).value;
+  numKbValue = current || "0";
+  document.getElementById("num-kb-title").textContent = target === "seisan" ? "生産数入力" : "廃却数入力";
+  document.getElementById("num-kb-display").textContent = numKbValue;
+  document.getElementById("num-kb-modal").style.display = "flex";
+}
+
+function numKbInput(char) {
+  if (numKbValue === "0") numKbValue = char;
+  else numKbValue += char;
+  document.getElementById("num-kb-display").textContent = numKbValue;
+}
+
+function numKbDelete() {
+  if (numKbValue.length > 1) numKbValue = numKbValue.slice(0, -1);
+  else numKbValue = "0";
+  document.getElementById("num-kb-display").textContent = numKbValue;
+}
+
+function numKbClear() {
+  numKbValue = "0";
+  document.getElementById("num-kb-display").textContent = numKbValue;
+}
+
+function cancelNumKeyboard() {
+  document.getElementById("num-kb-modal").style.display = "none";
+}
+
+function confirmNumKeyboard() {
+  const val = numKbValue === "0" ? "0" : numKbValue;
+  document.getElementById("input-" + numKbTarget).value = val;
+  document.getElementById(numKbTarget + "-text").textContent = val;
+  document.getElementById("num-kb-modal").style.display = "none";
 }
 
 function showToast(msg) {

@@ -320,11 +320,10 @@
   <!-- 品番入力 -->
   <div class="num-input-wrap">
     <label class="num-label">品番を入力（部分一致で検索）</label>
-    <input type="text" id="manual-hinban-input" class="num-input"
-      style="font-size:20px;font-weight:400;text-align:left;"
-      placeholder="例：095F6"
-      oninput="searchHinban(this.value)"
-      autocomplete="off" autocorrect="off" autocapitalize="off">
+    <div style="background:var(--input-bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;min-height:52px;font-size:20px;font-weight:400;cursor:text;word-break:break-all;" id="manual-biko-display" onclick="showManualKeyboard()">
+      <span id="manual-biko-text" style="color:var(--text)"></span><span id="manual-biko-placeholder" style="color:var(--sub)">例：095F6</span>
+    </div>
+    <input type="hidden" id="manual-hinban-input">
   </div>
 
   <!-- 候補リスト -->
@@ -1003,11 +1002,20 @@ function showScreen(id) {
 // ========================================
 let hinbanMasterList = [];
 let selectedHinbanData = null;
+let manualInputValue = "";
 
+function updateManualDisplay() {
+  const el = document.getElementById("manual-biko-text");
+  const ph = document.getElementById("manual-biko-placeholder");
+  if (el) el.textContent = manualInputValue || "";
+  if (ph) ph.style.display = manualInputValue ? "none" : "inline";
+}
 function showManualInput() {
   stopCamera();
   showScreen("screen-manual");
+  manualInputValue = "";
   document.getElementById("manual-hinban-input").value = "";
+  updateManualDisplay();
   document.getElementById("hinban-candidates").style.display = "none";
   document.getElementById("manual-selected").style.display = "none";
   document.getElementById("manual-empty").style.display = "none";
@@ -1033,7 +1041,7 @@ function showManualInput() {
         showToast("品番マスタ取得エラー");
       });
   }
-  setTimeout(() => document.getElementById("manual-hinban-input").focus(), 300);
+  setTimeout(() => showManualKeyboard(), 300);
 }
 
 function searchHinban(val) {
@@ -1138,11 +1146,24 @@ function closeModal(id) { document.getElementById(id).classList.remove("show"); 
 let bikoValue = "";
 let bikoDraft = ""; // モーダル内の一時入力値
 
+let kbMode = "biko"; // "biko" or "manual"
+
 function showCustomKeyboard() {
-  bikoDraft = bikoValue; // 現在の値を引き継ぐ
+  kbMode = "biko";
+  bikoDraft = bikoValue;
   updateKbDisplay();
+  document.getElementById("kb-modal-overlay").querySelector("span[style*='font-weight:700']").textContent = "備考入力";
   document.getElementById("kb-modal-overlay").style.display = "flex";
-  switchKbTab("num"); // 数字タブをデフォルトに
+  switchKbTab("num");
+}
+
+function showManualKeyboard() {
+  kbMode = "manual";
+  bikoDraft = manualInputValue;
+  updateKbDisplay();
+  document.getElementById("kb-modal-overlay").querySelector("span[style*='font-weight:700']").textContent = "品番入力";
+  document.getElementById("kb-modal-overlay").style.display = "flex";
+  switchKbTab("alpha");
 }
 
 function hideCustomKeyboard() {
@@ -1150,14 +1171,22 @@ function hideCustomKeyboard() {
 }
 
 function cancelCustomKeyboard() {
-  bikoDraft = bikoValue; // 変更を破棄
+  if (kbMode === "biko") bikoDraft = bikoValue;
+  else bikoDraft = manualInputValue;
   hideCustomKeyboard();
 }
 
 function confirmCustomKeyboard() {
-  bikoValue = bikoDraft;
-  document.getElementById("input-biko").value = bikoValue;
-  updateBikoDisplay();
+  if (kbMode === "biko") {
+    bikoValue = bikoDraft;
+    document.getElementById("input-biko").value = bikoValue;
+    updateBikoDisplay();
+  } else {
+    manualInputValue = bikoDraft;
+    document.getElementById("manual-hinban-input").value = manualInputValue;
+    updateManualDisplay();
+    searchHinban(manualInputValue);
+  }
   hideCustomKeyboard();
 }
 

@@ -1142,7 +1142,7 @@ function searchHinban(val) {
       if (kbBody) kbBody.style.maxHeight = "120px";
       filtered.slice(0, 8).forEach(h => {
         const div = document.createElement("div");
-        div.style.cssText = "padding:10px 16px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;";
+        div.style.cssText = "padding:16px 16px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;";
         div.innerHTML = `
           <div style="font-size:18px;font-weight:600;">${highlightMatch(h.hinban, val)}</div>
           <span style="color:var(--accent);font-size:18px;flex-shrink:0;">›</span>`;

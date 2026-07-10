@@ -1265,6 +1265,11 @@ function showCustomKeyboard() {
   updateKbDisplay();
   document.getElementById("kb-modal-overlay").querySelector("span[style*='font-weight:700']").textContent = "備考入力";
   document.getElementById("kb-modal-overlay").style.display = "flex";
+  // 備考モードは候補非表示
+  document.getElementById("kb-candidates").style.display = "none";
+  document.getElementById("kb-candidate-list").innerHTML = "";
+  const kbBody = document.getElementById("kb-body");
+  if (kbBody) kbBody.style.maxHeight = "";
   switchKbTab("num");
 }
 

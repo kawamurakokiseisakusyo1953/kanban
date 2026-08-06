@@ -549,6 +549,12 @@ let lastScanned = "";
 let lastScannedTime = 0;
 let deleteTargetId = null;
 
+// PC（マウス+物理キーボード）かタッチ端末かの判定。
+// タッチ端末側の操作性は一切変えず、PCの時だけ物理キーボード入力を有効にするために使う。
+function isTouchDevice() {
+  return !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
+}
+
 function getUnsent() { return JSON.parse(localStorage.getItem("kanban_unsent") || "[]"); }
 function saveUnsent(list) { localStorage.setItem("kanban_unsent", JSON.stringify(list)); }
 function getHistory() { return JSON.parse(localStorage.getItem("kanban_history") || "[]"); }
@@ -1298,6 +1304,8 @@ function showCustomKeyboard() {
   const kbBody = document.getElementById("kb-body");
   if (kbBody) kbBody.style.maxHeight = "";
   switchKbTab("num");
+  // PCでは物理キーボードでもそのまま打てるようにする（タッチ端末では従来通りタップ操作のみ）
+  if (!isTouchDevice()) document.addEventListener("keydown", customKbKeydownHandler);
 }
 
 function showManualKeyboard() {
@@ -1309,10 +1317,13 @@ function showManualKeyboard() {
   switchKbTab("num");
   // キーボード内に検索結果エリアを表示
   showKbCandidates();
+  // PCでは物理キーボードでもそのまま打てるようにする（タッチ端末では従来通りタップ操作のみ）
+  if (!isTouchDevice()) document.addEventListener("keydown", customKbKeydownHandler);
 }
 
 function hideCustomKeyboard() {
   document.getElementById("kb-modal-overlay").style.display = "none";
+  document.removeEventListener("keydown", customKbKeydownHandler);
 }
 
 function cancelCustomKeyboard() {
@@ -1333,6 +1344,17 @@ function confirmCustomKeyboard() {
     searchHinban(manualInputValue);
   }
   hideCustomKeyboard();
+}
+
+// 品番入力・備考入力の物理キーボード対応（PCのみ）。
+// IME変換中(isComposing)の重複入力を避けるため、変換確定前のキー入力は無視する。
+function customKbKeydownHandler(e) {
+  if (e.isComposing) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === "Backspace") { e.preventDefault(); kbDelete(); }
+  else if (e.key === "Enter") { e.preventDefault(); confirmCustomKeyboard(); }
+  else if (e.key === "Escape") { e.preventDefault(); cancelCustomKeyboard(); }
+  else if (e.key.length === 1) { e.preventDefault(); kbInput(e.key); }
 }
 
 let isShift = false;
@@ -1476,6 +1498,16 @@ function showNumKeyboard(target) {
   document.getElementById("num-kb-title").textContent = target === "seisan" ? "生産数入力" : "廃却数入力";
   document.getElementById("num-kb-display").textContent = numKbValue;
   document.getElementById("num-kb-modal").style.display = "flex";
+  // PCでは物理キーボードの数字キーでもそのまま打てるようにする（タッチ端末では従来通りタップ操作のみ）
+  if (!isTouchDevice()) document.addEventListener("keydown", numKbKeydownHandler);
+}
+
+// 数量入力の物理キーボード対応（PCのみ）
+function numKbKeydownHandler(e) {
+  if (e.key >= "0" && e.key <= "9") { e.preventDefault(); numKbInput(e.key); }
+  else if (e.key === "Backspace") { e.preventDefault(); numKbDelete(); }
+  else if (e.key === "Escape") { e.preventDefault(); cancelNumKeyboard(); }
+  else if (e.key === "Enter") { e.preventDefault(); confirmNumKeyboard(); }
 }
 
 function numKbInput(char) {
@@ -1497,6 +1529,7 @@ function numKbClear() {
 
 function cancelNumKeyboard() {
   document.getElementById("num-kb-modal").style.display = "none";
+  document.removeEventListener("keydown", numKbKeydownHandler);
 }
 
 function confirmNumKeyboard() {
@@ -1504,6 +1537,7 @@ function confirmNumKeyboard() {
   document.getElementById("input-" + numKbTarget).value = val;
   document.getElementById(numKbTarget + "-text").textContent = val;
   document.getElementById("num-kb-modal").style.display = "none";
+  document.removeEventListener("keydown", numKbKeydownHandler);
 }
 
 function showToast(msg) {

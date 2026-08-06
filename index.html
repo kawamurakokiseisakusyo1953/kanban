@@ -551,8 +551,15 @@ let deleteTargetId = null;
 
 // PC（マウス+物理キーボード）かタッチ端末かの判定。
 // タッチ端末側の操作性は一切変えず、PCの時だけ物理キーボード入力を有効にするために使う。
+// タッチ操作ができる(pointer:coarse)だけで判定すると、タッチ対応ノートPCや2-in-1のように
+// マウス/トラックパッドと物理キーボードも使える端末まで「タッチ端末」扱いになり、
+// 物理キーボード入力が無効化されてしまう。そのため「精密ポインタ(マウス等)が一切無い」
+// 場合だけをタッチ端末とみなす。
 function isTouchDevice() {
-  return !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
+  if (!window.matchMedia) return false;
+  const coarse = window.matchMedia("(pointer: coarse)").matches;
+  const hasFinePointer = window.matchMedia("(any-pointer: fine)").matches;
+  return coarse && !hasFinePointer;
 }
 
 function getUnsent() { return JSON.parse(localStorage.getItem("kanban_unsent") || "[]"); }

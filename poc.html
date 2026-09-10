@@ -77,12 +77,13 @@
   </div>
 
   <div class="toggles">
-    <label><input type="checkbox" id="allowDup" checked> 同じQRも連続カウント（速度テスト用）</label>
+    <label><input type="checkbox" id="speedMode"> 速度テストモード（連射OK）</label>
     <label><input type="checkbox" id="beepOn" checked> 音</label>
     <label><input type="checkbox" id="vibOn" checked> バイブ</label>
   </div>
 
   <div class="big">
+    <div id="arm" style="font-size:15px;font-weight:800;margin-bottom:6px;color:var(--ok);">● かざしてOK</div>
     <div class="n" id="total">0</div>
     <div class="l">読取カウント（有効QR）</div>
   </div>
@@ -109,8 +110,8 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 const QR_MIN = 63, QR_MAX = 350;
-const COOLDOWN_MS = 500;
-const SAME_QR_LOCK_MS = 3000;
+const FLOOR_MS = 350;             // 受け付け間隔の下限（チラつき対策）
+const CLEAR_FRAMES = 3;           // 「何も映ってない」がこの回数続いたら再武装
 const LOOP_MIN_MS = 90;           // デコード間隔の下限（詰まり防止）
 
 let stream=null, track=null, video=document.getElementById('v');
@@ -121,7 +122,8 @@ let decoderPref='jsqr';           // 'jsqr' | 'native'
 let nativeDetector=null, nativeAvailable=false;
 
 let total=0, invalidCount=0;
-let lastAcceptTs=0, lastRaw='', lastRawTs=0, prevReadTs=0, lastLoopTs=0;
+let lastAcceptTs=0, prevReadTs=0, lastLoopTs=0;
+let armed=true, acceptedRaw='', emptyStreak=0;
 let decHist=[], decMin=1e9, decMax=0;
 let attempts=0, attemptWinStart=0;
 let dbgFrame='—', dbgLastLen='—', dbgErr='—';
@@ -248,9 +250,23 @@ async function loop(){
   const dt = performance.now() - t0;
 
   countAttempt();
-  if (raw != null) { dbgLastLen = raw.length; onDecode(raw, dt); }
+  if (raw != null) {
+    dbgLastLen = raw.length;
+    emptyStreak = 0;
+    onDecode(raw, dt);
+  } else {
+    emptyStreak++;
+    if (!armed && emptyStreak >= CLEAR_FRAMES) { armed = true; updateArmUI(); }
+  }
   renderDbg();
   schedule();
+}
+
+function updateArmUI(){
+  const el = $('arm');
+  if ($('speedMode').checked) { el.textContent = '● 速度テスト（連射）'; el.style.color = 'var(--warn)'; return; }
+  if (armed) { el.textContent = '● かざしてOK'; el.style.color = 'var(--ok)'; }
+  else       { el.textContent = '● 読取済み — 一度離してください'; el.style.color = 'var(--sub)'; }
 }
 
 function countAttempt(){
@@ -270,16 +286,21 @@ function onDecode(raw, dt){
   $('decMinMax').textContent = Math.round(decMin) + ' / ' + Math.round(decMax);
 
   const now = performance.now();
-  if (now - lastAcceptTs < COOLDOWN_MS) return;
+  if (now - lastAcceptTs < FLOOR_MS) return;
 
-  const allowDup = $('allowDup').checked;
-  if (!allowDup && raw === lastRaw && now - lastRawTs < SAME_QR_LOCK_MS) return;
+  const speed = $('speedMode').checked;
+  if (!speed) {
+    // ゲート：武装解除中は、別のQRが来たときだけ再武装して受け付ける
+    if (!armed) {
+      if (raw !== acceptedRaw) { armed = true; }
+      else { return; }
+    }
+  }
 
   const valid = raw.length >= QR_MIN && raw.length <= QR_MAX
              && raw.startsWith('20110607') && raw.includes('000.0');
 
   lastAcceptTs = now;
-  lastRaw = raw; lastRawTs = now;
 
   if (!valid){
     invalidCount++;
@@ -287,6 +308,7 @@ function onDecode(raw, dt){
     flash(true, '?');
     $('last').innerHTML = '<span style="color:var(--bad)">対象外QR</span>　長さ ' + raw.length
       + '<br><span class="muted">' + escapeHtml(raw.slice(0, 90)) + (raw.length>90?'…':'') + '</span>';
+    if (!speed) { armed = false; acceptedRaw = raw; updateArmUI(); }
     return;
   }
 
@@ -302,6 +324,8 @@ function onDecode(raw, dt){
   if ($('beepOn').checked) beep();
   if ($('vibOn').checked && navigator.vibrate) navigator.vibrate(55);
   flash(false, 'OK');
+
+  if (!speed) { armed = false; acceptedRaw = raw; updateArmUI(); }
 
   $('last').innerHTML = '品番 <b>' + escapeHtml(hinban || '(空)') + '</b>'
     + '　<span class="muted">デコード ' + Math.round(dt) + 'ms / 間隔 ' + (gap?gap+'ms':'—') + '</span>';
@@ -354,7 +378,8 @@ function togglePause(){
 
 function resetAll(){
   total = 0; invalidCount = 0; decHist = []; decMin = 1e9; decMax = 0;
-  prevReadTs = 0; lastRaw = ''; lastAcceptTs = 0;
+  prevReadTs = 0; lastAcceptTs = 0;
+  armed = true; acceptedRaw = ''; emptyStreak = 0; updateArmUI();
   for (const k in tally) delete tally[k];
   $('total').textContent = '0';
   $('invalid').textContent = '0';
@@ -370,7 +395,9 @@ function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+$('speedMode').addEventListener('change', () => { armed = true; emptyStreak = 0; updateArmUI(); });
 updateModeLabel();
+updateArmUI();
 </script>
 </body>
 </html>

@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>カメラ読取テスト</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:#12151c; --card:#1c2230; --line:#2c3446; --txt:#e9edf5; --sub:#8b96a9;
+    --accent:#4f9cf9; --ok:#34d399; --warn:#fbbf24; --bad:#f87171;
+  }
+  html,body { background:var(--bg); color:var(--txt); font-family:-apple-system,"Noto Sans JP",sans-serif; }
+  body { padding:10px; padding-bottom:40px; }
+  h1 { font-size:20px; font-weight:800; margin-bottom:8px; }
+  .muted { color:var(--sub); font-size:12px; }
+
+  .camwrap { position:relative; width:100%; aspect-ratio:1/1; background:#000; border-radius:14px; overflow:hidden; margin-bottom:10px; }
+  #v { width:100%; height:100%; object-fit:cover; display:block; }
+  .guide { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
+  .guide > div { width:70%; aspect-ratio:1/1; border:3px solid var(--accent); border-radius:10px; box-shadow:0 0 0 2000px rgba(0,0,0,0.25); }
+  .flash { position:absolute; inset:0; background:var(--ok); opacity:0; transition:opacity .08s; pointer-events:none; }
+  .flash.bad { background:var(--bad); }
+
+  .row { display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
+  button {
+    background:var(--card); border:1px solid var(--line); color:var(--txt);
+    border-radius:10px; padding:12px 14px; font-size:15px; font-weight:700; cursor:pointer; flex:1; min-width:120px;
+  }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.ghost { background:transparent; }
+  button:active { opacity:.7; }
+  button[disabled] { opacity:.4; }
+
+  .big { text-align:center; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:8px; }
+  .big .n { font-size:64px; font-weight:900; line-height:1; }
+  .big .l { font-size:13px; color:var(--sub); margin-top:4px; }
+
+  .stats { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; }
+  .stat .v { font-size:26px; font-weight:800; }
+  .stat .k { font-size:11px; color:var(--sub); margin-top:2px; }
+
+  .last { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; margin-bottom:8px; font-size:13px; word-break:break-all; }
+  .last b { font-size:20px; }
+
+  .toggles { display:flex; gap:14px; margin-bottom:8px; font-size:13px; color:var(--sub); flex-wrap:wrap; }
+  .toggles label { display:flex; align-items:center; gap:6px; }
+  .toggles input { width:20px; height:20px; accent-color:var(--accent); }
+
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th,td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); }
+  th { color:var(--sub); font-size:12px; }
+  td.num { text-align:right; font-weight:800; font-size:18px; }
+
+  #err { color:var(--bad); font-size:13px; margin-bottom:8px; white-space:pre-wrap; }
+</style>
+</head>
+<body>
+  <h1>カメラ読取テスト <span class="muted" id="mode">—</span></h1>
+  <div id="err"></div>
+
+  <div class="camwrap">
+    <video id="v" playsinline autoplay muted></video>
+    <div class="guide"><div></div></div>
+    <div class="flash" id="flash"></div>
+  </div>
+
+  <div class="row">
+    <button class="primary" id="startBtn" onclick="start()">▶ カメラ開始</button>
+    <button class="ghost" id="torchBtn" onclick="toggleTorch()" disabled>🔦 ライト</button>
+  </div>
+  <div class="row">
+    <button class="ghost" onclick="resetAll()">↺ リセット</button>
+    <button class="ghost" id="pauseBtn" onclick="togglePause()" disabled>⏸ 一時停止</button>
+  </div>
+
+  <div class="toggles">
+    <label><input type="checkbox" id="allowDup" checked> 同じQRも連続カウント（速度テスト用）</label>
+    <label><input type="checkbox" id="beepOn" checked> 音</label>
+    <label><input type="checkbox" id="vibOn" checked> バイブ</label>
+  </div>
+
+  <div class="big">
+    <div class="n" id="total">0</div>
+    <div class="l">読取カウント（有効QR）</div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="v" id="decLast">— ms</div><div class="k">前回デコード時間</div></div>
+    <div class="stat"><div class="v" id="decAvg">— ms</div><div class="k">平均デコード（直近30回）</div></div>
+    <div class="stat"><div class="v" id="gapLast">— ms</div><div class="k">前回読取からの間隔</div></div>
+    <div class="stat"><div class="v" id="fps">— /s</div><div class="k">判定回数（スキャンFPS）</div></div>
+  </div>
+
+  <div class="last" id="last">まだ読み取っていません</div>
+
+  <div class="stats">
+    <div class="stat"><div class="v" id="invalid">0</div><div class="k">対象外QR（20110607始まり / 000.0含む でない）</div></div>
+    <div class="stat"><div class="v" id="decMinMax">— / —</div><div class="k">デコード最小 / 最大 ms</div></div>
+  </div>
+
+  <table>
+    <thead><tr><th>品番</th><th style="text-align:right">箱数</th></tr></thead>
+    <tbody id="tally"></tbody>
+  </table>
+
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script>
+const QR_MIN = 63, QR_MAX = 350;
+const COOLDOWN_MS = 500;          // 1回読んだ後この時間は次を受け付けない
+const SAME_QR_LOCK_MS = 3000;     // 「連続カウント」OFF時、同一QRを無視する時間
+
+let stream=null, track=null, video=document.getElementById('v');
+let canvas=document.createElement('canvas'), cctx=canvas.getContext('2d', { willReadFrequently:true });
+let detector=null, mode='—', running=false, paused=false;
+let torchOn=false;
+
+let total=0, invalidCount=0;
+let lastAcceptTs=0, lastRaw='', lastRawTs=0, prevReadTs=0;
+let decHist=[], decMin=1e9, decMax=0;
+let attempts=0, attemptWinStart=0;
+const tally = {};
+
+const $ = id => document.getElementById(id);
+
+function showErr(m){ $('err').textContent = m || ''; }
+
+async function start(){
+  showErr('');
+  $('startBtn').disabled = true;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: 'environment' },
+        width:  { ideal: 1920 },
+        height: { ideal: 1080 },
+        frameRate: { ideal: 30 }
+      },
+      audio: false
+    });
+  } catch(e){
+    showErr('カメラ起動失敗: ' + e.name + ' / ' + e.message);
+    $('startBtn').disabled = false;
+    return;
+  }
+  video.srcObject = stream;
+  await video.play();
+  track = stream.getVideoTracks()[0];
+
+  // 連続オートフォーカス（対応端末のみ）
+  try { await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }); } catch(e){}
+
+  // ライト対応判定
+  let caps = {};
+  try { caps = track.getCapabilities ? track.getCapabilities() : {}; } catch(e){}
+  $('torchBtn').disabled = !caps.torch;
+  if (!caps.torch) $('torchBtn').textContent = '🔦 ライト（非対応）';
+
+  // デコーダ選択：BarcodeDetector（ネイティブ）→ jsQR
+  detector = null; mode = 'jsQR';
+  if ('BarcodeDetector' in window) {
+    try {
+      const fmts = await BarcodeDetector.getSupportedFormats();
+      if (fmts.includes('qr_code')) {
+        detector = new BarcodeDetector({ formats: ['qr_code'] });
+        mode = 'BarcodeDetector';
+      }
+    } catch(e){}
+  }
+  if (mode === 'jsQR' && typeof jsQR !== 'function') {
+    showErr('jsQR の読み込みに失敗。ネット接続を確認してください。');
+  }
+  $('mode').textContent = '[' + mode + ']';
+
+  running = true; paused = false;
+  $('pauseBtn').disabled = false;
+  attemptWinStart = performance.now();
+  schedule();
+}
+
+function schedule(){
+  if (!running) return;
+  if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
+    video.requestVideoFrameCallback(() => loop());
+  } else {
+    setTimeout(loop, 60);
+  }
+}
+
+async function loop(){
+  if (!running) return;
+  if (paused) { schedule(); return; }
+
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw || !vh) { schedule(); return; }
+
+  // 中央のガイド枠だけ切り出す
+  const side = Math.floor(Math.min(vw, vh) * 0.7);
+  const sx = Math.floor((vw - side) / 2), sy = Math.floor((vh - side) / 2);
+  if (canvas.width !== side) { canvas.width = side; canvas.height = side; }
+  cctx.drawImage(video, sx, sy, side, side, 0, 0, side, side);
+
+  const t0 = performance.now();
+  let raw = null;
+  try {
+    if (mode === 'BarcodeDetector') {
+      const codes = await detector.detect(canvas);
+      if (codes && codes.length) raw = codes[0].rawValue;
+    } else if (typeof jsQR === 'function') {
+      const img = cctx.getImageData(0, 0, side, side);
+      const code = jsQR(img.data, side, side, { inversionAttempts: 'dontInvert' });
+      if (code && code.data) raw = code.data;
+    }
+  } catch(e){ /* 個別フレームのエラーは無視 */ }
+  const dt = performance.now() - t0;
+
+  countAttempt();
+  if (raw != null) onDecode(raw, dt);
+
+  schedule();
+}
+
+function countAttempt(){
+  attempts++;
+  const now = performance.now();
+  if (now - attemptWinStart >= 1000) {
+    $('fps').textContent = Math.round(attempts * 1000 / (now - attemptWinStart)) + ' /s';
+    attempts = 0; attemptWinStart = now;
+  }
+}
+
+function onDecode(raw, dt){
+  // デコード時間統計（実際に何か読めた時だけ）
+  decHist.push(dt); if (decHist.length > 30) decHist.shift();
+  decMin = Math.min(decMin, dt); decMax = Math.max(decMax, dt);
+  $('decLast').textContent = Math.round(dt) + ' ms';
+  $('decAvg').textContent = Math.round(decHist.reduce((a,b)=>a+b,0) / decHist.length) + ' ms';
+  $('decMinMax').textContent = Math.round(decMin) + ' / ' + Math.round(decMax);
+
+  const now = performance.now();
+  if (now - lastAcceptTs < COOLDOWN_MS) return;
+
+  const allowDup = $('allowDup').checked;
+  if (!allowDup && raw === lastRaw && now - lastRawTs < SAME_QR_LOCK_MS) return;
+
+  const valid = raw.length >= QR_MIN && raw.length <= QR_MAX
+             && raw.startsWith('20110607') && raw.includes('000.0');
+
+  lastAcceptTs = now;
+  lastRaw = raw; lastRawTs = now;
+
+  if (!valid){
+    invalidCount++;
+    $('invalid').textContent = invalidCount;
+    flash(true);
+    $('last').innerHTML = '<span style="color:var(--bad)">対象外QR</span>　長さ ' + raw.length
+      + '<br><span class="muted">' + escapeHtml(raw.slice(0, 80)) + (raw.length>80?'…':'') + '</span>';
+    return;
+  }
+
+  const gap = prevReadTs ? Math.round(now - prevReadTs) : 0;
+  prevReadTs = now;
+  $('gapLast').textContent = gap ? (gap + ' ms') : '—';
+
+  const hinban = raw.substring(38, 63).trim();
+  tally[hinban] = (tally[hinban] || 0) + 1;
+  total++;
+  $('total').textContent = total;
+
+  if ($('beepOn').checked) beep();
+  if ($('vibOn').checked && navigator.vibrate) navigator.vibrate(55);
+  flash(false);
+
+  $('last').innerHTML = '品番 <b>' + escapeHtml(hinban || '(空)') + '</b>'
+    + '　<span class="muted">デコード ' + Math.round(dt) + 'ms / 間隔 ' + (gap?gap+'ms':'—') + '</span>';
+  renderTally();
+}
+
+function renderTally(){
+  const rows = Object.keys(tally).sort().map(h =>
+    '<tr><td>' + escapeHtml(h) + '</td><td class="num">' + tally[h] + '</td></tr>').join('');
+  $('tally').innerHTML = rows;
+}
+
+function flash(bad){
+  const f = $('flash');
+  f.classList.toggle('bad', !!bad);
+  f.style.opacity = '0.55';
+  setTimeout(() => { f.style.opacity = '0'; }, 90);
+}
+
+let audioCtx = null;
+function beep(){
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.connect(g); g.connect(audioCtx.destination);
+    o.type = 'square'; o.frequency.value = 1250;
+    g.gain.setValueAtTime(0.25, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.12);
+    o.start(); o.stop(audioCtx.currentTime + 0.12);
+  } catch(e){}
+}
+
+async function toggleTorch(){
+  if (!track) return;
+  torchOn = !torchOn;
+  try {
+    await track.applyConstraints({ advanced: [{ torch: torchOn }] });
+    $('torchBtn').textContent = torchOn ? '🔦 ライト ON' : '🔦 ライト';
+  } catch(e){
+    torchOn = !torchOn;
+    showErr('ライト切替失敗: ' + e.message);
+  }
+}
+
+function togglePause(){
+  paused = !paused;
+  $('pauseBtn').textContent = paused ? '▶ 再開' : '⏸ 一時停止';
+}
+
+function resetAll(){
+  total = 0; invalidCount = 0; decHist = []; decMin = 1e9; decMax = 0;
+  prevReadTs = 0; lastRaw = ''; lastAcceptTs = 0;
+  for (const k in tally) delete tally[k];
+  $('total').textContent = '0';
+  $('invalid').textContent = '0';
+  $('decLast').textContent = '— ms';
+  $('decAvg').textContent = '— ms';
+  $('gapLast').textContent = '— ms';
+  $('decMinMax').textContent = '— / —';
+  $('last').textContent = 'まだ読み取っていません';
+  $('tally').innerHTML = '';
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+</script>
+</body>
+</html>

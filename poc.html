@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>カメラ読取テスト</title>
+<title>カメラ読取テスト v2</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -12,20 +12,20 @@
   }
   html,body { background:var(--bg); color:var(--txt); font-family:-apple-system,"Noto Sans JP",sans-serif; }
   body { padding:10px; padding-bottom:40px; }
-  h1 { font-size:20px; font-weight:800; margin-bottom:8px; }
+  h1 { font-size:19px; font-weight:800; margin-bottom:4px; }
   .muted { color:var(--sub); font-size:12px; }
+  #dbg { font-size:11px; color:var(--sub); margin-bottom:6px; word-break:break-all; }
 
   .camwrap { position:relative; width:100%; aspect-ratio:1/1; background:#000; border-radius:14px; overflow:hidden; margin-bottom:10px; }
   #v { width:100%; height:100%; object-fit:cover; display:block; }
-  .guide { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
-  .guide > div { width:70%; aspect-ratio:1/1; border:3px solid var(--accent); border-radius:10px; box-shadow:0 0 0 2000px rgba(0,0,0,0.25); }
-  .flash { position:absolute; inset:0; background:var(--ok); opacity:0; transition:opacity .08s; pointer-events:none; }
-  .flash.bad { background:var(--bad); }
+  .flash { position:absolute; inset:0; background:var(--ok); opacity:0; transition:opacity .08s; pointer-events:none;
+           display:flex; align-items:center; justify-content:center; font-size:40px; font-weight:900; color:#06301f; }
+  .flash.bad { background:var(--bad); color:#3a0d0d; }
 
   .row { display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
   button {
     background:var(--card); border:1px solid var(--line); color:var(--txt);
-    border-radius:10px; padding:12px 14px; font-size:15px; font-weight:700; cursor:pointer; flex:1; min-width:120px;
+    border-radius:10px; padding:12px 14px; font-size:15px; font-weight:700; cursor:pointer; flex:1; min-width:110px;
   }
   button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
   button.ghost { background:transparent; }
@@ -57,12 +57,12 @@
 </style>
 </head>
 <body>
-  <h1>カメラ読取テスト <span class="muted" id="mode">—</span></h1>
+  <h1>カメラ読取テスト v2 <span class="muted" id="mode">—</span></h1>
+  <div id="dbg">—</div>
   <div id="err"></div>
 
   <div class="camwrap">
     <video id="v" playsinline autoplay muted></video>
-    <div class="guide"><div></div></div>
     <div class="flash" id="flash"></div>
   </div>
 
@@ -73,6 +73,7 @@
   <div class="row">
     <button class="ghost" onclick="resetAll()">↺ リセット</button>
     <button class="ghost" id="pauseBtn" onclick="togglePause()" disabled>⏸ 一時停止</button>
+    <button class="ghost" id="decBtn" onclick="toggleDecoder()">デコーダ: jsQR</button>
   </div>
 
   <div class="toggles">
@@ -96,7 +97,7 @@
   <div class="last" id="last">まだ読み取っていません</div>
 
   <div class="stats">
-    <div class="stat"><div class="v" id="invalid">0</div><div class="k">対象外QR（20110607始まり / 000.0含む でない）</div></div>
+    <div class="stat"><div class="v" id="invalid">0</div><div class="k">対象外QR</div></div>
     <div class="stat"><div class="v" id="decMinMax">— / —</div><div class="k">デコード最小 / 最大 ms</div></div>
   </div>
 
@@ -108,35 +109,58 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 const QR_MIN = 63, QR_MAX = 350;
-const COOLDOWN_MS = 500;          // 1回読んだ後この時間は次を受け付けない
-const SAME_QR_LOCK_MS = 3000;     // 「連続カウント」OFF時、同一QRを無視する時間
+const COOLDOWN_MS = 500;
+const SAME_QR_LOCK_MS = 3000;
+const LOOP_MIN_MS = 90;           // デコード間隔の下限（詰まり防止）
 
 let stream=null, track=null, video=document.getElementById('v');
 let canvas=document.createElement('canvas'), cctx=canvas.getContext('2d', { willReadFrequently:true });
-let detector=null, mode='—', running=false, paused=false;
-let torchOn=false;
+let running=false, paused=false, torchOn=false;
+
+let decoderPref='jsqr';           // 'jsqr' | 'native'
+let nativeDetector=null, nativeAvailable=false;
 
 let total=0, invalidCount=0;
-let lastAcceptTs=0, lastRaw='', lastRawTs=0, prevReadTs=0;
+let lastAcceptTs=0, lastRaw='', lastRawTs=0, prevReadTs=0, lastLoopTs=0;
 let decHist=[], decMin=1e9, decMax=0;
 let attempts=0, attemptWinStart=0;
+let dbgFrame='—', dbgLastLen='—', dbgErr='—';
 const tally = {};
 
 const $ = id => document.getElementById(id);
-
 function showErr(m){ $('err').textContent = m || ''; }
+
+function renderDbg(){
+  const using = (decoderPref==='native' && nativeAvailable) ? 'BarcodeDetector' : 'jsQR';
+  $('dbg').textContent = '実デコーダ ' + using + ' / フレーム ' + dbgFrame
+    + ' / 最終QR長 ' + dbgLastLen + ' / エラー ' + dbgErr;
+}
+function updateModeLabel(){
+  const using = (decoderPref==='native' && nativeAvailable) ? 'BarcodeDetector' : 'jsQR';
+  $('mode').textContent = '[' + using + ']';
+  $('decBtn').textContent = 'デコーダ: ' + (decoderPref==='native'
+      ? ('ネイティブ' + (nativeAvailable ? '' : '(無効→jsQR)'))
+      : 'jsQR');
+  renderDbg();
+}
+function toggleDecoder(){
+  decoderPref = (decoderPref==='jsqr') ? 'native' : 'jsqr';
+  updateModeLabel();
+}
 
 async function start(){
   showErr('');
   $('startBtn').disabled = true;
+
+  // 音の許可（このクリックのタイミングで resume）
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    audioCtx.resume();
+  } catch(e){}
+
   try {
     stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: { ideal: 'environment' },
-        width:  { ideal: 1920 },
-        height: { ideal: 1080 },
-        frameRate: { ideal: 30 }
-      },
+      video: { facingMode:{ ideal:'environment' }, width:{ ideal:1280 }, height:{ ideal:720 } },
       audio: false
     });
   } catch(e){
@@ -148,30 +172,22 @@ async function start(){
   await video.play();
   track = stream.getVideoTracks()[0];
 
-  // 連続オートフォーカス（対応端末のみ）
-  try { await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }); } catch(e){}
+  try { await track.applyConstraints({ advanced:[{ focusMode:'continuous' }] }); } catch(e){}
 
-  // ライト対応判定
   let caps = {};
   try { caps = track.getCapabilities ? track.getCapabilities() : {}; } catch(e){}
   $('torchBtn').disabled = !caps.torch;
   if (!caps.torch) $('torchBtn').textContent = '🔦 ライト（非対応）';
 
-  // デコーダ選択：BarcodeDetector（ネイティブ）→ jsQR
-  detector = null; mode = 'jsQR';
+  // ネイティブの有無だけ調べる（使うかはトグル次第）
+  nativeDetector = null; nativeAvailable = false;
   if ('BarcodeDetector' in window) {
     try {
-      const fmts = await BarcodeDetector.getSupportedFormats();
-      if (fmts.includes('qr_code')) {
-        detector = new BarcodeDetector({ formats: ['qr_code'] });
-        mode = 'BarcodeDetector';
-      }
+      const f = await BarcodeDetector.getSupportedFormats();
+      if (f.includes('qr_code')) { nativeDetector = new BarcodeDetector({ formats:['qr_code'] }); nativeAvailable = true; }
     } catch(e){}
   }
-  if (mode === 'jsQR' && typeof jsQR !== 'function') {
-    showErr('jsQR の読み込みに失敗。ネット接続を確認してください。');
-  }
-  $('mode').textContent = '[' + mode + ']';
+  updateModeLabel();
 
   running = true; paused = false;
   $('pauseBtn').disabled = false;
@@ -179,45 +195,61 @@ async function start(){
   schedule();
 }
 
+// 画面タップでピント合わせ（対応端末のみ・ベストエフォート）
+video.addEventListener('click', async () => {
+  if (!track) return;
+  try {
+    await track.applyConstraints({ advanced:[{ focusMode:'single-shot' }] });
+    setTimeout(() => { track.applyConstraints({ advanced:[{ focusMode:'continuous' }] }).catch(()=>{}); }, 1500);
+  } catch(e){}
+});
+
 function schedule(){
   if (!running) return;
-  if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
-    video.requestVideoFrameCallback(() => loop());
-  } else {
-    setTimeout(loop, 60);
-  }
+  if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) video.requestVideoFrameCallback(() => loop());
+  else setTimeout(loop, LOOP_MIN_MS);
 }
 
 async function loop(){
   if (!running) return;
   if (paused) { schedule(); return; }
 
+  const now = performance.now();
+  if (now - lastLoopTs < LOOP_MIN_MS) { schedule(); return; }
+  lastLoopTs = now;
+
   const vw = video.videoWidth, vh = video.videoHeight;
   if (!vw || !vh) { schedule(); return; }
+  dbgFrame = vw + 'x' + vh;
 
-  // 中央のガイド枠だけ切り出す
-  const side = Math.floor(Math.min(vw, vh) * 0.7);
-  const sx = Math.floor((vw - side) / 2), sy = Math.floor((vh - side) / 2);
-  if (canvas.width !== side) { canvas.width = side; canvas.height = side; }
-  cctx.drawImage(video, sx, sy, side, side, 0, 0, side, side);
+  // ★ 生産記録アプリと同じ：カメラ画像を丸ごとデコード（切り出しなし）
+  if (canvas.width !== vw) { canvas.width = vw; canvas.height = vh; }
+  cctx.drawImage(video, 0, 0, vw, vh);
 
+  const useNative = (decoderPref==='native' && nativeAvailable && nativeDetector);
   const t0 = performance.now();
   let raw = null;
   try {
-    if (mode === 'BarcodeDetector') {
-      const codes = await detector.detect(canvas);
+    if (useNative) {
+      const codes = await nativeDetector.detect(canvas);
       if (codes && codes.length) raw = codes[0].rawValue;
+      dbgErr = '—';
     } else if (typeof jsQR === 'function') {
-      const img = cctx.getImageData(0, 0, side, side);
-      const code = jsQR(img.data, side, side, { inversionAttempts: 'dontInvert' });
+      const img = cctx.getImageData(0, 0, vw, vh);
+      const code = jsQR(img.data, vw, vh, { inversionAttempts: 'dontInvert' });
       if (code && code.data) raw = code.data;
+      dbgErr = '—';
+    } else {
+      dbgErr = 'jsQR未ロード（ネット確認）';
     }
-  } catch(e){ /* 個別フレームのエラーは無視 */ }
+  } catch(e){
+    dbgErr = (e.name || '') + ' ' + (e.message || '');
+  }
   const dt = performance.now() - t0;
 
   countAttempt();
-  if (raw != null) onDecode(raw, dt);
-
+  if (raw != null) { dbgLastLen = raw.length; onDecode(raw, dt); }
+  renderDbg();
   schedule();
 }
 
@@ -231,7 +263,6 @@ function countAttempt(){
 }
 
 function onDecode(raw, dt){
-  // デコード時間統計（実際に何か読めた時だけ）
   decHist.push(dt); if (decHist.length > 30) decHist.shift();
   decMin = Math.min(decMin, dt); decMax = Math.max(decMax, dt);
   $('decLast').textContent = Math.round(dt) + ' ms';
@@ -253,9 +284,9 @@ function onDecode(raw, dt){
   if (!valid){
     invalidCount++;
     $('invalid').textContent = invalidCount;
-    flash(true);
+    flash(true, '?');
     $('last').innerHTML = '<span style="color:var(--bad)">対象外QR</span>　長さ ' + raw.length
-      + '<br><span class="muted">' + escapeHtml(raw.slice(0, 80)) + (raw.length>80?'…':'') + '</span>';
+      + '<br><span class="muted">' + escapeHtml(raw.slice(0, 90)) + (raw.length>90?'…':'') + '</span>';
     return;
   }
 
@@ -270,7 +301,7 @@ function onDecode(raw, dt){
 
   if ($('beepOn').checked) beep();
   if ($('vibOn').checked && navigator.vibrate) navigator.vibrate(55);
-  flash(false);
+  flash(false, 'OK');
 
   $('last').innerHTML = '品番 <b>' + escapeHtml(hinban || '(空)') + '</b>'
     + '　<span class="muted">デコード ' + Math.round(dt) + 'ms / 間隔 ' + (gap?gap+'ms':'—') + '</span>';
@@ -278,16 +309,16 @@ function onDecode(raw, dt){
 }
 
 function renderTally(){
-  const rows = Object.keys(tally).sort().map(h =>
+  $('tally').innerHTML = Object.keys(tally).sort().map(h =>
     '<tr><td>' + escapeHtml(h) + '</td><td class="num">' + tally[h] + '</td></tr>').join('');
-  $('tally').innerHTML = rows;
 }
 
-function flash(bad){
+function flash(bad, txt){
   const f = $('flash');
   f.classList.toggle('bad', !!bad);
-  f.style.opacity = '0.55';
-  setTimeout(() => { f.style.opacity = '0'; }, 90);
+  f.textContent = txt || '';
+  f.style.opacity = '0.9';
+  setTimeout(() => { f.style.opacity = '0'; }, 130);
 }
 
 let audioCtx = null;
@@ -308,7 +339,7 @@ async function toggleTorch(){
   if (!track) return;
   torchOn = !torchOn;
   try {
-    await track.applyConstraints({ advanced: [{ torch: torchOn }] });
+    await track.applyConstraints({ advanced:[{ torch: torchOn }] });
     $('torchBtn').textContent = torchOn ? '🔦 ライト ON' : '🔦 ライト';
   } catch(e){
     torchOn = !torchOn;
@@ -338,6 +369,8 @@ function resetAll(){
 function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+
+updateModeLabel();
 </script>
 </body>
 </html>

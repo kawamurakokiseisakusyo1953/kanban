@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#12151c">
+<title>受入QRスキャン</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:#12151c; --card:#1c2230; --line:#2c3446; --txt:#e9edf5; --sub:#8b96a9;
+    --accent:#4f9cf9; --ok:#34d399; --warn:#fbbf24; --bad:#f87171;
+  }
+  html,body { background:var(--bg); color:var(--txt); font-family:-apple-system,"Noto Sans JP",sans-serif; }
+  body { padding:10px 10px 40px; }
+  h1 { font-size:19px; font-weight:800; margin-bottom:8px; }
+  .sub { color:var(--sub); font-size:12px; }
+  .screen { display:none; }
+  .screen.on { display:block; }
+
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:10px; }
+  label.fld { display:block; font-size:13px; color:var(--sub); margin:10px 0 6px; }
+  select, input[type=password], input[type=text], input[type=number] {
+    width:100%; background:var(--bg); border:1px solid var(--line); color:var(--txt);
+    border-radius:10px; padding:13px 14px; font-size:17px; font-weight:700; outline:none;
+  }
+  select:focus, input:focus { border-color:var(--accent); }
+
+  .row { display:flex; gap:8px; flex-wrap:wrap; }
+  button {
+    background:var(--card); border:1px solid var(--line); color:var(--txt);
+    border-radius:10px; padding:13px 14px; font-size:15px; font-weight:700; cursor:pointer; flex:1; min-width:100px;
+  }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.ok { background:var(--ok); border-color:var(--ok); color:#06301f; }
+  button.ghost { background:transparent; }
+  button:active { opacity:.7; }
+  button[disabled] { opacity:.4; }
+  .full { width:100%; flex:none; margin-top:8px; }
+
+  .camwrap { position:relative; width:100%; aspect-ratio:1/1; background:#000; border-radius:14px; overflow:hidden; margin-bottom:8px; }
+  #v { width:100%; height:100%; object-fit:cover; display:block; }
+  .flash { position:absolute; inset:0; opacity:0; transition:opacity .08s; pointer-events:none;
+           display:flex; align-items:center; justify-content:center; font-size:38px; font-weight:900; }
+  .flash.ok { background:var(--ok); color:#06301f; }
+  .flash.bad { background:var(--bad); color:#3a0d0d; }
+
+  .arm { font-size:15px; font-weight:800; margin-bottom:6px; }
+  .bignum { text-align:center; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px; margin-bottom:8px; }
+  .bignum .n { font-size:52px; font-weight:900; line-height:1; }
+  .bignum .l { font-size:12px; color:var(--sub); margin-top:2px; }
+
+  .hd { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px; font-size:13px; }
+  .badge { background:var(--line); border-radius:20px; padding:5px 12px; font-weight:700; white-space:nowrap; }
+  .badge.warn { background:rgba(251,191,36,.18); color:var(--warn); border:1px solid var(--warn); }
+  .badge.off  { background:rgba(248,113,113,.18); color:var(--bad); border:1px solid var(--bad); }
+
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th,td { text-align:left; padding:9px 6px; border-bottom:1px solid var(--line); }
+  th { color:var(--sub); font-size:12px; }
+  td.num { text-align:right; font-weight:800; }
+  tr.bad td { color:var(--bad); }
+  .taprow { cursor:pointer; }
+  .taprow:active { background:rgba(255,255,255,.05); }
+  .miniinput { width:64px; padding:8px; font-size:15px; text-align:center; }
+
+  .toggles { display:flex; gap:14px; margin:8px 0; font-size:13px; color:var(--sub); flex-wrap:wrap; }
+  .toggles label { display:flex; align-items:center; gap:6px; }
+  .toggles input { width:20px; height:20px; accent-color:var(--accent); }
+
+  .datelist { max-height:46vh; overflow-y:auto; border:1px solid var(--line); border-radius:10px; }
+  .dateitem { padding:15px 14px; border-bottom:1px solid var(--line); font-size:17px; font-weight:700; cursor:pointer; }
+  .dateitem:last-child { border-bottom:none; }
+  .dateitem.sel { background:var(--accent); color:#fff; }
+
+  .sheet { position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:flex-end; z-index:50; }
+  .sheet.on { display:flex; }
+  .sheet .box { background:var(--card); border-radius:18px 18px 0 0; padding:18px; width:100%; }
+  .sheet h3 { font-size:16px; margin-bottom:10px; }
+
+  #err { color:var(--bad); font-size:13px; margin:6px 0; white-space:pre-wrap; }
+  #dbg { font-size:11px; color:var(--sub); margin-bottom:6px; word-break:break-all; }
+  .note { font-size:12px; color:var(--sub); margin-top:6px; }
+  .resume { background:rgba(251,191,36,.14); border:1px solid var(--warn); color:var(--warn);
+            border-radius:12px; padding:12px; margin-bottom:10px; font-size:14px; font-weight:700; }
+</style>
+</head>
+<body>
+
+<!-- ========== ログイン ========== -->
+<div class="screen on" id="s-login">
+  <h1>受入QRスキャン</h1>
+  <div class="sub" id="netInfo">—</div>
+  <div id="resumeBox" class="resume" style="display:none;"></div>
+  <div class="card">
+    <label class="fld">メーカー</label>
+    <select id="loginMaker"></select>
+    <label class="fld">パスワード</label>
+    <input type="password" id="loginPw" autocomplete="current-password">
+    <button class="primary full" id="loginBtn" onclick="doLogin()">ログイン</button>
+    <div class="note">初回のみネット接続が必要です。以降はオフラインで読取できます。</div>
+  </div>
+  <div id="err"></div>
+</div>
+
+<!-- ========== 納入日 ========== -->
+<div class="screen" id="s-date">
+  <h1>納入日を選択</h1>
+  <div class="sub" id="dateMakerInfo">—</div>
+  <div class="card">
+    <div style="font-size:13px;color:var(--sub);margin-bottom:8px;">デフォルト（メーカー設定）が選択済みです。変更する場合は下から選択。</div>
+    <div class="datelist" id="dateList"></div>
+    <button class="primary full" onclick="startScanning()">この日で読取開始</button>
+    <button class="ghost full" onclick="logout()">ログアウト</button>
+  </div>
+</div>
+
+<!-- ========== スキャン ========== -->
+<div class="screen" id="s-scan">
+  <div class="hd">
+    <span class="badge" id="scMaker">—</span>
+    <span class="badge" id="scDate">—</span>
+    <span class="badge" id="scNet">—</span>
+  </div>
+  <div id="dbg">—</div>
+
+  <div class="camwrap">
+    <video id="v" playsinline autoplay muted></video>
+    <div class="flash" id="flash"></div>
+  </div>
+
+  <div class="arm" id="arm">● かざしてOK</div>
+
+  <div class="bignum">
+    <div class="n" id="total">0</div>
+    <div class="l">読取枚数（合計）</div>
+  </div>
+
+  <div class="row">
+    <button id="btnExtra" onclick="openExtra()" disabled>端数・破壊</button>
+    <button class="ghost" id="btnTorch" onclick="toggleTorch()" disabled>🔦 ライト</button>
+    <button class="ghost" id="btnPause" onclick="togglePause()">⏸ 一時停止</button>
+  </div>
+  <button class="ok full" onclick="goReview()">読取おわり・確認へ</button>
+
+  <div class="toggles">
+    <label><input type="checkbox" id="bypass"> マスタ照合OFF（緊急時）</label>
+    <label><input type="checkbox" id="beepOn" checked> 音</label>
+    <label><input type="checkbox" id="vibOn" checked> バイブ</label>
+    <label><input type="checkbox" id="nativeDec"> ネイティブ解析</label>
+  </div>
+
+  <div class="card" style="padding:10px;">
+    <div style="font-size:12px;color:var(--sub);margin-bottom:4px;">品番別（タップで端数/破壊入力）</div>
+    <table><tbody id="tally"></tbody></table>
+    <div id="rejBox" class="note" style="color:var(--bad);"></div>
+  </div>
+  <button class="ghost full" onclick="backToDate()">← 納入日にもどる</button>
+</div>
+
+<!-- ========== 確認 ========== -->
+<div class="screen" id="s-review">
+  <h1>確認</h1>
+  <div class="sub" id="revInfo">—</div>
+  <div class="card">
+    <table>
+      <thead><tr><th>品番</th><th style="text-align:right">枚数</th><th style="text-align:center">端数</th><th style="text-align:center">破壊</th><th style="text-align:right">箱数</th></tr></thead>
+      <tbody id="revBody"></tbody>
+    </table>
+    <div class="note">「箱数」＝ 端数を入れた品番は 枚数−1、それ以外は 枚数。</div>
+  </div>
+  <button class="ok full" id="sendBtn" onclick="doSend()">送信（ネット必要）</button>
+  <button class="ghost full" onclick="show('s-scan'); resumeCamera();">← 読取にもどる</button>
+  <div id="err2" style="color:var(--bad);font-size:13px;margin-top:6px;white-space:pre-wrap;"></div>
+</div>
+
+<!-- ========== 完了 ========== -->
+<div class="screen" id="s-done">
+  <h1 id="doneTitle">送信完了</h1>
+  <div class="card">
+    <div id="doneBody" style="font-size:15px;line-height:1.7;"></div>
+    <button class="primary full" onclick="continueScan()">続けて読取</button>
+    <button class="ghost full" onclick="logout()">ログアウト</button>
+  </div>
+</div>
+
+<!-- ========== 端数/破壊 パネル ========== -->
+<div class="sheet" id="extraSheet">
+  <div class="box">
+    <h3 id="extraTitle">端数・破壊</h3>
+    <label class="fld">対象品番</label>
+    <select id="extraHinban"></select>
+    <label class="fld">端数（最後の半端箱の入数。無ければ空）</label>
+    <input type="number" id="extraHasuu" inputmode="numeric" min="0">
+    <label class="fld">破壊数（無ければ空 or 0）</label>
+    <input type="number" id="extraHakai" inputmode="numeric" min="0">
+    <div class="row" style="margin-top:12px;">
+      <button class="ghost" onclick="clearExtra()">クリア</button>
+      <button class="primary" onclick="saveExtra()">保存</button>
+    </div>
+    <button class="ghost full" onclick="closeExtra()">閉じる</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script>
+/* ================= 設定 ================= */
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbzALEt3uPha_JbW7USYz8Q3TJnbg9gJauFe9yTEC3KqPrIqChkBLb-Tj0kt5WjqlMor/exec';
+
+const MAKERS_FALLBACK = ['大澤熔接工業所','清国溶接','小山製作所','山田鉄工所','丸磯工業所','花木製作所','羽谷工業所','伊藤プレス','メタルクリーン','マルマツ','ウエルギコウ','松原工業所','安井鉄工所','真鍋工業','向井工作所','大動工業','アクトメタル','日本グラス','エバー','トライ','村田工業所','檜山技研工業所','加藤技研工業所','トヨアケメッキ','福洋精工'];
+
+const QR_MIN = 63, QR_MAX = 350;
+const FLOOR_MS = 350;
+const CLEAR_FRAMES = 3;
+const LOOP_MIN_MS = 90;
+const AUTH_MAX_AGE_MS = 30 * 24 * 3600 * 1000;   // 記憶ログインの有効期間
+
+const K_AUTH = 'rcv_auth', K_PENDING = 'rcv_pending', K_HIST = 'rcv_history', K_DEV = 'rcv_device';
+
+/* ================= localStorage ================= */
+function lget(k, d){ try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch(e){ return d; } }
+function lset(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+function ldel(k){ try { localStorage.removeItem(k); } catch(e){} }
+
+function deviceId(){
+  let d = lget(K_DEV, null);
+  if (!d){ d = Math.random().toString(36).slice(2,8); lset(K_DEV, d); }
+  return d;
+}
+
+/* ================= 状態 ================= */
+let auth = lget(K_AUTH, null);            // {maker,pw,offset,hinbanReady,hinban:[],torihiki:[],makers:[],ts}
+let pending = lget(K_PENDING, null);      // {shukkaDate, scans:[{ts,qr,hinban}], extra:{hinban:{hasuu,hakai}}}
+let hinbanSet = null, toriSet = null;
+let chosenDate = '';                      // yyyy/MM/dd
+let scanSeq = 0;
+
+/* ================= 画面遷移 ================= */
+function show(id){
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('on'));
+  document.getElementById(id).classList.add('on');
+  window.scrollTo(0,0);
+}
+
+/* ================= ネット表示 ================= */
+function netBadge(){
+  const on = navigator.onLine;
+  const t = on ? 'オンライン' : 'オフライン';
+  const el = document.getElementById('netInfo'); if (el) el.textContent = '状態: ' + t;
+  const b = document.getElementById('scNet');
+  if (b){ b.textContent = t; b.className = 'badge' + (on ? '' : ' off'); }
+}
+window.addEventListener('online', netBadge);
+window.addEventListener('offline', netBadge);
+
+/* ================= 起動 ================= */
+window.addEventListener('load', () => {
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+  netBadge();
+
+  // メーカー候補
+  const sel = document.getElementById('loginMaker');
+  const makers = (auth && auth.makers && auth.makers.length) ? auth.makers : MAKERS_FALLBACK;
+  sel.innerHTML = '<option value="">選択してください</option>' + makers.map(m => '<option>'+esc(m)+'</option>').join('');
+
+  if (auth){
+    sel.value = auth.maker || '';
+    document.getElementById('loginPw').value = auth.pw || '';
+    setAuthSets();
+  }
+  // 未送信の復帰
+  pending = lget(K_PENDING, null);
+  if (pending && pending.scans && pending.scans.length && auth){
+    const rb = document.getElementById('resumeBox');
+    rb.style.display = 'block';
+    rb.innerHTML = '未送信 ' + pending.scans.length + '枚（' + esc(auth.maker) + ' / ' + esc(pending.shukkaDate) + '）'
+      + '<br><button class="primary full" onclick="resumePending()">確認・送信する</button>'
+      + '<button class="ghost full" onclick="discardPending()">破棄する</button>';
+  }
+});
+
+function setAuthSets(){
+  hinbanSet = (auth && auth.hinban) ? new Set(auth.hinban.map(x=>String(x).trim())) : null;
+  toriSet   = (auth && auth.torihiki && auth.torihiki.length) ? new Set(auth.torihiki.map(x=>String(x).trim())) : null;
+}
+
+function resumePending(){
+  chosenDate = pending.shukkaDate;
+  renderReview();
+  show('s-review');
+}
+function discardPending(){
+  if (!confirm('未送信データを破棄します。よろしいですか？')) return;
+  ldel(K_PENDING); pending = null;
+  document.getElementById('resumeBox').style.display = 'none';
+}
+
+/* ================= ログイン ================= */
+function doLogin(){
+  const maker = document.getElementById('loginMaker').value.trim();
+  const pw = document.getElementById('loginPw').value;
+  const err = document.getElementById('err');
+  err.textContent = '';
+  if (!maker || !pw){ err.textContent = 'メーカーとパスワードを入力してください'; return; }
+
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true; btn.textContent = 'ログイン中...';
+
+  fetch(GAS_URL, { method:'POST', headers:{'Content-Type':'text/plain'},
+                   body: JSON.stringify({ action:'login', maker: maker, pw: pw }) })
+    .then(r => r.json()).then(res => {
+    btn.disabled = false; btn.textContent = 'ログイン';
+    if (!res.ok){ err.textContent = res.message || 'ログイン失敗'; return; }
+    auth = {
+      maker: res.maker, pw: pw, offset: res.offset || 0,
+      hinbanReady: !!res.hinbanReady, hinban: res.hinban || [], torihiki: res.torihiki || [],
+      makers: res.makers || MAKERS_FALLBACK, ts: Date.now()
+    };
+    lset(K_AUTH, auth);
+    setAuthSets();
+    enterDateScreen();
+  }).catch(e => {
+    btn.disabled = false; btn.textContent = 'ログイン';
+    // オフライン：記憶ログインで通す
+    if (auth && auth.maker === maker && auth.pw === pw && (Date.now() - (auth.ts||0)) < AUTH_MAX_AGE_MS){
+      setAuthSets();
+      enterDateScreen();
+    } else {
+      err.textContent = 'ネットに繋がりません。初回ログインはオンラインで行ってください。';
+    }
+  });
+}
+
+function logout(){
+  stopCamera();
+  ldel(K_AUTH);
+  // pending は消さない（未送信が残っていれば次回復帰）
+  auth = null;
+  document.getElementById('loginPw').value = '';
+  show('s-login');
+  location.reload();
+}
+
+/* ================= 納入日 ================= */
+function addBusinessDays(base, n){
+  const d = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+  let added = 0;
+  while (added < n){ d.setDate(d.getDate()+1); const w = d.getDay(); if (w !== 0 && w !== 6) added++; }
+  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate()+1); // n<=0で週末なら翌営業日へ
+  return d;
+}
+function fmtDate(d){
+  return d.getFullYear() + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + String(d.getDate()).padStart(2,'0');
+}
+function jpDate(d){
+  const w = ['日','月','火','水','木','金','土'][d.getDay()];
+  return (d.getMonth()+1) + '/' + d.getDate() + '（' + w + '）';
+}
+
+function enterDateScreen(){
+  document.getElementById('dateMakerInfo').textContent = auth.maker
+    + '　品番マスタ: ' + (auth.hinbanReady ? (auth.hinban.length + '件') : '未整備（照合スキップ）');
+  const today = new Date();
+  const def = addBusinessDays(today, auth.offset || 0);
+  const defStr = fmtDate(def);
+  chosenDate = defStr;
+
+  // 今日＋以降の平日を並べる
+  const list = document.getElementById('dateList');
+  list.innerHTML = '';
+  const d = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  let cnt = 0;
+  while (cnt < 25){
+    const w = d.getDay();
+    if (w !== 0 && w !== 6){
+      const s = fmtDate(d);
+      const div = document.createElement('div');
+      div.className = 'dateitem' + (s === defStr ? ' sel' : '');
+      div.textContent = jpDate(d) + (s === defStr ? '　← デフォルト' : '');
+      div.dataset.d = s;
+      div.onclick = function(){
+        chosenDate = this.dataset.d;
+        list.querySelectorAll('.dateitem').forEach(x => x.classList.remove('sel'));
+        this.classList.add('sel');
+      };
+      list.appendChild(div);
+      cnt++;
+    }
+    d.setDate(d.getDate()+1);
+  }
+  show('s-date');
+}
+
+/* ================= スキャン開始 ================= */
+function startScanning(){
+  if (!chosenDate){ alert('納入日を選択してください'); return; }
+  // 別メーカー/別日の未送信が残っていたら警告
+  if (pending && pending.scans && pending.scans.length &&
+      (pending.shukkaDate !== chosenDate)){
+    if (!confirm('未送信データ（' + pending.shukkaDate + ' / ' + pending.scans.length + '枚）があります。\n先に送信することを推奨します。\nこのまま新しい読取を始めますか？（未送信は保持されます）')) return;
+  }
+  if (!pending || pending.shukkaDate !== chosenDate){
+    pending = { shukkaDate: chosenDate, scans: [], extra: {} };
+    lset(K_PENDING, pending);
+  }
+  document.getElementById('scMaker').textContent = auth.maker;
+  document.getElementById('scDate').textContent = chosenDate;
+  netBadge();
+  renderTally();
+  show('s-scan');
+  startCamera();
+}
+function backToDate(){ stopCamera(); enterDateScreen(); }
+function continueScan(){ ldel(K_PENDING); pending = null; enterDateScreen(); }
+
+/* ================= カメラ / デコード ================= */
+let stream=null, track=null, video=document.getElementById('v');
+let cv=document.createElement('canvas'), cx=cv.getContext('2d',{willReadFrequently:true});
+let nativeDet=null, nativeOK=false, running=false, paused=false, torchOn=false;
+let armed=true, emptyStreak=0, acceptedRaw='', lastAcceptTs=0, lastLoopTs=0;
+let dbgFrame='—', dbgLast='—', dbgErr='—';
+
+async function startCamera(){
+  running=false; stopCamera();
+  document.getElementById('err') && (document.getElementById('err').textContent='');
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720} }, audio:false
+    });
+  } catch(e){
+    alert('カメラ起動失敗: ' + e.name + ' / ' + e.message); return;
+  }
+  video.srcObject = stream; await video.play();
+  track = stream.getVideoTracks()[0];
+  try { await track.applyConstraints({ advanced:[{ focusMode:'continuous' }] }); } catch(e){}
+  let caps={}; try { caps = track.getCapabilities ? track.getCapabilities() : {}; } catch(e){}
+  document.getElementById('btnTorch').disabled = !caps.torch;
+
+  nativeDet=null; nativeOK=false;
+  if ('BarcodeDetector' in window){
+    try {
+      const f = await BarcodeDetector.getSupportedFormats();
+      if (f.includes('qr_code')){ nativeDet = new BarcodeDetector({formats:['qr_code']}); nativeOK=true; }
+    } catch(e){}
+  }
+  armed=true; emptyStreak=0; acceptedRaw=''; paused=false;
+  document.getElementById('btnPause').textContent = '⏸ 一時停止';
+  running=true; lastLoopTs=0;
+  try { if(!actx) actx = new (window.AudioContext||window.webkitAudioContext)(); actx.resume(); } catch(e){}
+  updateArm();
+  schedule();
+}
+function resumeCamera(){ if (stream && !running){ running=true; schedule(); } else if (!stream){ startCamera(); } }
+function stopCamera(){
+  running=false;
+  if (stream){ stream.getVideoTracks().forEach(t=>t.stop()); stream=null; track=null; }
+}
+video.addEventListener('click', async () => {
+  if (!track) return;
+  try { await track.applyConstraints({ advanced:[{ focusMode:'single-shot' }] });
+    setTimeout(()=>{ track.applyConstraints({ advanced:[{ focusMode:'continuous' }] }).catch(()=>{}); }, 1400);
+  } catch(e){}
+});
+function schedule(){
+  if (!running) return;
+  if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) video.requestVideoFrameCallback(loop);
+  else setTimeout(loop, LOOP_MIN_MS);
+}
+async function loop(){
+  if (!running) return;
+  if (paused){ schedule(); return; }
+  const now = performance.now();
+  if (now - lastLoopTs < LOOP_MIN_MS){ schedule(); return; }
+  lastLoopTs = now;
+  const vw=video.videoWidth, vh=video.videoHeight;
+  if (!vw || !vh){ schedule(); return; }
+  dbgFrame = vw+'x'+vh;
+  if (cv.width !== vw){ cv.width=vw; cv.height=vh; }
+  cx.drawImage(video, 0, 0, vw, vh);
+
+  const useNative = document.getElementById('nativeDec').checked && nativeOK && nativeDet;
+  let raw=null;
+  try {
+    if (useNative){
+      const codes = await nativeDet.detect(cv);
+      if (codes && codes.length) raw = codes[0].rawValue;
+      dbgErr='—';
+    } else if (typeof jsQR === 'function'){
+      const img = cx.getImageData(0,0,vw,vh);
+      const c = jsQR(img.data, vw, vh, { inversionAttempts:'dontInvert' });
+      if (c && c.data) raw = c.data;
+      dbgErr='—';
+    } else dbgErr='jsQR未ロード';
+  } catch(e){ dbgErr = (e.name||'')+' '+(e.message||''); }
+
+  if (raw != null){ dbgLast = raw.length; emptyStreak = 0; onDecode(raw); }
+  else { emptyStreak++; if (!armed && emptyStreak >= CLEAR_FRAMES){ armed = true; updateArm(); } }
+
+  document.getElementById('dbg').textContent =
+    (useNative?'BarcodeDetector':'jsQR') + ' / ' + dbgFrame + ' / QR長 ' + dbgLast + ' / ' + dbgErr;
+  schedule();
+}
+function updateArm(){
+  const el = document.getElementById('arm');
+  if (armed){ el.textContent = '● かざしてOK'; el.style.color = 'var(--ok)'; }
+  else { el.textContent = '● 読取済み — 一度はなす'; el.style.color = 'var(--sub)'; }
+}
+
+/* ================= 読取判定 ================= */
+let rejCounts = { master:0, tori:0, format:0 };
+function onDecode(raw){
+  const now = performance.now();
+  if (now - lastAcceptTs < FLOOR_MS) return;
+  if (!armed){
+    if (raw !== acceptedRaw) armed = true;
+    else return;
+  }
+
+  const okFormat = raw.length >= QR_MIN && raw.length <= QR_MAX
+                && raw.slice(0,8) === '20110607' && raw.indexOf('000.0') !== -1;
+  const hinban = raw.substring(38, 63).trim();
+  const tori   = raw.substring(20, 25).trim();
+  const bypass = document.getElementById('bypass').checked;
+
+  lastAcceptTs = now;
+  acceptedRaw = raw; armed = false; updateArm();
+
+  if (!okFormat){
+    rejCounts.format++; reject('対象外QR（長さ ' + raw.length + '）'); return;
+  }
+  if (!bypass && hinbanSet && !hinbanSet.has(hinban)){
+    rejCounts.master++; reject('マスタ外の品番: ' + (hinban || '(空)')); return;
+  }
+  if (!bypass && toriSet && tori && !toriSet.has(tori)){
+    rejCounts.tori++; reject('別メーカーの札（取引先 ' + tori + '）'); return;
+  }
+
+  // 受理
+  const d = new Date();
+  const ts = fmtDate(d) + ' ' + d.toTimeString().slice(0,8)
+           + '.' + String(d.getMilliseconds()).padStart(3,'0')
+           + '/' + deviceId() + '-' + (++scanSeq);
+  pending.scans.push({ ts: ts, qr: raw, hinban: hinban });
+  lset(K_PENDING, pending);
+  flash('ok', 'OK');
+  if (document.getElementById('beepOn').checked) beep(1250, .12);
+  if (document.getElementById('vibOn').checked && navigator.vibrate) navigator.vibrate(55);
+  document.getElementById('btnExtra').disabled = false;
+  renderTally();
+}
+function reject(msg){
+  flash('bad', '×');
+  if (document.getElementById('beepOn').checked) beep(320, .18);
+  if (document.getElementById('vibOn').checked && navigator.vibrate) navigator.vibrate([40,40,40]);
+  const box = document.getElementById('rejBox');
+  box.textContent = '弾いた: ' + msg
+    + '　（マスタ外 ' + rejCounts.master + ' / 別メーカー ' + rejCounts.tori + ' / 対象外 ' + rejCounts.format + '）';
+}
+
+/* ================= タリー ================= */
+function tallyMap(){
+  const m = {};
+  pending.scans.forEach(s => { m[s.hinban] = (m[s.hinban]||0) + 1; });
+  return m;
+}
+function renderTally(){
+  const m = tallyMap();
+  const keys = Object.keys(m).sort();
+  document.getElementById('total').textContent = pending.scans.length;
+  const tb = document.getElementById('tally');
+  tb.innerHTML = keys.map(h => {
+    const ex = pending.extra[h] || {};
+    const tag = [];
+    if (ex.hasuu) tag.push('端数' + ex.hasuu);
+    if (ex.hakai) tag.push('破壊' + ex.hakai);
+    return '<tr class="taprow" onclick="openExtra(\'' + esc(h).replace(/'/g,"\\'") + '\')">'
+      + '<td>' + esc(h) + (tag.length ? ' <span style="color:var(--warn);font-size:12px;">'+tag.join(' ')+'</span>' : '') + '</td>'
+      + '<td class="num">' + m[h] + '</td></tr>';
+  }).join('');
+}
+
+/* ================= 端数/破壊 ================= */
+function openExtra(hinban){
+  const m = tallyMap();
+  const keys = Object.keys(m).sort();
+  if (!keys.length){ return; }
+  const sel = document.getElementById('extraHinban');
+  sel.innerHTML = keys.map(k => '<option'+((hinban && k===hinban)?' selected':'')+'>'+esc(k)+'</option>').join('');
+  if (!hinban){
+    const last = pending.scans[pending.scans.length-1];
+    if (last) sel.value = last.hinban;
+  }
+  loadExtraInputs();
+  document.getElementById('extraSheet').classList.add('on');
+}
+function loadExtraInputs(){
+  const h = document.getElementById('extraHinban').value;
+  const ex = pending.extra[h] || {};
+  document.getElementById('extraHasuu').value = (ex.hasuu != null ? ex.hasuu : '');
+  document.getElementById('extraHakai').value = (ex.hakai != null ? ex.hakai : '');
+}
+document.getElementById('extraHinban').addEventListener('change', loadExtraInputs);
+function saveExtra(){
+  const h = document.getElementById('extraHinban').value;
+  const hs = document.getElementById('extraHasuu').value.trim();
+  const hk = document.getElementById('extraHakai').value.trim();
+  const o = {};
+  if (hs !== '') o.hasuu = String(parseInt(hs,10) || 0);
+  if (hk !== '') o.hakai = String(parseInt(hk,10) || 0);
+  if (Object.keys(o).length) pending.extra[h] = o; else delete pending.extra[h];
+  lset(K_PENDING, pending);
+  renderTally();
+  closeExtra();
+}
+function clearExtra(){
+  const h = document.getElementById('extraHinban').value;
+  delete pending.extra[h];
+  lset(K_PENDING, pending);
+  document.getElementById('extraHasuu').value = '';
+  document.getElementById('extraHakai').value = '';
+  renderTally();
+}
+function closeExtra(){ document.getElementById('extraSheet').classList.remove('on'); }
+
+/* ================= 確認 ================= */
+function goReview(){
+  if (!pending.scans.length){ alert('まだ1枚も読み取っていません'); return; }
+  running = false;   // カメラ止めずに一時停止（戻れる）
+  renderReview();
+  show('s-review');
+}
+function renderReview(){
+  document.getElementById('revInfo').textContent = auth.maker + '　納入日 ' + pending.shukkaDate + '　合計 ' + pending.scans.length + '枚';
+  const m = tallyMap();
+  const keys = Object.keys(m).sort();
+  const tb = document.getElementById('revBody');
+  tb.innerHTML = keys.map(h => {
+    const ex = pending.extra[h] || {};
+    const mai = m[h];
+    const hako = (ex.hasuu && Number(ex.hasuu) > 0) ? (mai - 1) : mai;
+    return '<tr>'
+      + '<td>' + esc(h) + '</td>'
+      + '<td class="num">' + mai + '</td>'
+      + '<td style="text-align:center"><input class="miniinput" type="number" inputmode="numeric" min="0" value="' + (ex.hasuu!=null?ex.hasuu:'') + '" onchange="revEdit(\'' + esc(h).replace(/\x27/g,"\\x27") + '\',\'hasuu\',this.value)"></td>'
+      + '<td style="text-align:center"><input class="miniinput" type="number" inputmode="numeric" min="0" value="' + (ex.hakai!=null?ex.hakai:'') + '" onchange="revEdit(\'' + esc(h).replace(/\x27/g,"\\x27") + '\',\'hakai\',this.value)"></td>'
+      + '<td class="num">' + hako + '</td>'
+      + '</tr>';
+  }).join('');
+}
+function revEdit(h, key, val){
+  val = String(val).trim();
+  const o = pending.extra[h] || {};
+  if (val === '') delete o[key]; else o[key] = String(parseInt(val,10) || 0);
+  if (Object.keys(o).length) pending.extra[h] = o; else delete pending.extra[h];
+  lset(K_PENDING, pending);
+  renderReview();
+}
+
+/* ================= 送信 ================= */
+function buildRows(){
+  const byH = {};
+  pending.scans.forEach(s => { (byH[s.hinban] = byH[s.hinban] || []).push(s); });
+  const rows = [];
+  Object.keys(byH).forEach(h => {
+    const arr = byH[h];
+    const ex = pending.extra[h] || {};
+    arr.forEach((s, i) => {
+      const isLast = (i === arr.length - 1);
+      rows.push({
+        ts: s.ts, qr: s.qr, hinban: h,
+        hasuu: (isLast && ex.hasuu) ? ex.hasuu : '',
+        hakai: (isLast && ex.hakai) ? ex.hakai : ''
+      });
+    });
+  });
+  return rows;
+}
+function doSend(){
+  const btn = document.getElementById('sendBtn');
+  const err = document.getElementById('err2');
+  err.textContent = '';
+  if (!navigator.onLine){ err.textContent = 'オフラインです。ネットに繋いでから送信してください。（データは保持されています）'; return; }
+  btn.disabled = true; btn.textContent = '送信中...';
+  const payload = { maker: auth.maker, pw: auth.pw, shukkaDate: pending.shukkaDate, rows: buildRows() };
+  fetch(GAS_URL, { method:'POST', headers:{'Content-Type':'text/plain'}, body: JSON.stringify(payload) })
+    .then(r => r.json()).then(res => {
+      btn.disabled = false; btn.textContent = '送信（ネット必要）';
+      if (!res.ok){ err.textContent = 'エラー: ' + (res.message || '不明'); return; }
+      const hist = lget(K_HIST, []);
+      hist.unshift({ sentAt: new Date().toISOString(), maker: auth.maker, shukkaDate: pending.shukkaDate, rows: res.added });
+      lset(K_HIST, hist.slice(0, 50));
+      ldel(K_PENDING); pending = null;
+      document.getElementById('doneTitle').textContent = '送信完了';
+      document.getElementById('doneBody').innerHTML =
+        auth.maker + '<br>納入日 ' + payload.shukkaDate + '<br>追記 ' + res.added + ' 行<br><br>納品書アプリ側で「QRデータ取込」してください。';
+      stopCamera();
+      show('s-done');
+    })
+    .catch(e => {
+      btn.disabled = false; btn.textContent = '送信（ネット必要）';
+      err.textContent = '送信できませんでした（通信エラー）。データは保持されています。もう一度お試しください。\n' + e.message;
+    });
+}
+
+/* ================= 一時停止 / ライト ================= */
+function togglePause(){
+  paused = !paused;
+  document.getElementById('btnPause').textContent = paused ? '▶ 再開' : '⏸ 一時停止';
+}
+async function toggleTorch(){
+  if (!track) return;
+  torchOn = !torchOn;
+  try { await track.applyConstraints({ advanced:[{ torch: torchOn }] });
+    document.getElementById('btnTorch').textContent = torchOn ? '🔦 ライト ON' : '🔦 ライト';
+  } catch(e){ torchOn = !torchOn; }
+}
+
+/* ================= 音 ================= */
+let actx = null;
+function beep(freq, dur){
+  try {
+    if (!actx) actx = new (window.AudioContext||window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.connect(g); g.connect(actx.destination);
+    o.type = 'square'; o.frequency.value = freq;
+    g.gain.setValueAtTime(.25, actx.currentTime);
+    g.gain.exponentialRampToValueAtTime(.001, actx.currentTime + dur);
+    o.start(); o.stop(actx.currentTime + dur);
+  } catch(e){}
+}
+function flash(cls, txt){
+  const f = document.getElementById('flash');
+  f.className = 'flash ' + cls; f.textContent = txt;
+  f.style.opacity = '.9';
+  setTimeout(()=>{ f.style.opacity = '0'; }, 130);
+}
+
+/* ================= misc ================= */
+function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+window.addEventListener('beforeunload', (e) => {
+  const p = lget(K_PENDING, null);
+  if (p && p.scans && p.scans.length){ e.preventDefault(); e.returnValue = ''; }
+});
+</script>
+</body>
+</html>

@@ -11,8 +11,9 @@
     --bg:#12151c; --card:#1c2230; --line:#2c3446; --txt:#e9edf5; --sub:#8b96a9;
     --accent:#4f9cf9; --ok:#34d399; --warn:#fbbf24; --bad:#f87171;
   }
+  html { overscroll-behavior: none; overscroll-behavior-y: none; }
   html,body { background:var(--bg); color:var(--txt); font-family:-apple-system,"Noto Sans JP",sans-serif; }
-  body { padding:10px 10px 40px; }
+  body { padding:10px 10px 40px; overscroll-behavior: none; overscroll-behavior-y: none; overflow-x: hidden; touch-action: pan-y; }
   h1 { font-size:19px; font-weight:800; margin-bottom:8px; }
   .sub { color:var(--sub); font-size:12px; }
   .screen { display:none; }
@@ -67,7 +68,36 @@
   tr.bad td { color:var(--bad); }
   .taprow { cursor:pointer; }
   .taprow:active { background:rgba(255,255,255,.05); }
-  .miniinput { width:64px; padding:8px; font-size:15px; text-align:center; }
+  .miniinput { display:inline-block; min-width:44px; padding:8px 10px; font-size:16px; font-weight:800; text-align:center;
+               border:2px solid var(--line); border-radius:8px; cursor:pointer; }
+  .miniinput:active { background:rgba(255,255,255,.06); }
+  .miniinput.empty { color:var(--sub); font-weight:400; }
+
+  .nyuka-display {
+    display:flex; justify-content:space-between; align-items:center;
+    background:var(--bg); border:2px solid var(--accent); border-radius:10px;
+    padding:13px 14px; cursor:pointer; min-height:52px;
+  }
+  .nyuka-display:active { background:rgba(79,156,249,.12); }
+  .nyuka-val { font-size:22px; font-weight:800; color:var(--txt); }
+  .nyuka-val.empty { color:var(--sub); font-weight:400; font-size:16px; }
+  .nyuka-icon { font-size:16px; color:var(--accent); opacity:.7; }
+
+  .numpad { margin-top:10px; background:var(--bg); border:1px solid var(--line); border-radius:12px; padding:12px; }
+  .numpad-keys { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:10px; }
+  .numpad-key {
+    padding:18px 6px; font-size:24px; font-weight:800; border:none; border-radius:10px;
+    background:var(--card); color:var(--txt); cursor:pointer; flex:none;
+  }
+  .numpad-key:active { background:var(--accent); color:#fff; }
+  .numpad-key-wide { grid-column:span 2; }
+  .numpad-key-del { background:rgba(248,113,113,.16); color:var(--bad); }
+  .numpad-key-del:active { background:var(--bad); color:#fff; }
+  .numpad-confirm {
+    width:100%; padding:15px; font-size:17px; font-weight:800; background:var(--ok);
+    color:#06301f; border:none; border-radius:10px; cursor:pointer;
+  }
+  .numpad-confirm:active { opacity:.8; }
 
   .toggles { display:flex; gap:14px; margin:8px 0; font-size:13px; color:var(--sub); flex-wrap:wrap; }
   .toggles label { display:flex; align-items:center; gap:6px; }
@@ -88,9 +118,12 @@
   .note { font-size:12px; color:var(--sub); margin-top:6px; }
   .resume { background:rgba(251,191,36,.14); border:1px solid var(--warn); color:var(--warn);
             border-radius:12px; padding:12px; margin-bottom:10px; font-size:14px; font-weight:700; }
+
+  #verFixed { position:fixed; bottom:4px; right:8px; font-size:10px; color:var(--sub); opacity:.55; z-index:9999; pointer-events:none; }
 </style>
 </head>
 <body>
+<div id="verFixed">—</div>
 
 <!-- ========== ログイン ========== -->
 <div class="screen on" id="s-login">
@@ -214,9 +247,15 @@
     <label class="fld">対象品番</label>
     <select id="extraHinban"></select>
     <label class="fld">端数（最後の半端箱の入数。無ければ空）</label>
-    <input type="number" id="extraHasuu" inputmode="numeric" min="0">
+    <div class="nyuka-display" onclick="openExtraNumpad('hasuu')">
+      <span id="extraHasuuDisp" class="nyuka-val empty">—</span><span class="nyuka-icon">⌨</span>
+    </div>
+    <input type="hidden" id="extraHasuu">
     <label class="fld">破壊数（無ければ空 or 0）</label>
-    <input type="number" id="extraHakai" inputmode="numeric" min="0">
+    <div class="nyuka-display" onclick="openExtraNumpad('hakai')">
+      <span id="extraHakaiDisp" class="nyuka-val empty">—</span><span class="nyuka-icon">⌨</span>
+    </div>
+    <input type="hidden" id="extraHakai">
     <div class="row" style="margin-top:12px;">
       <button class="ghost" onclick="clearExtra()">クリア</button>
       <button class="primary" onclick="saveExtra()">保存</button>
@@ -225,10 +264,37 @@
   </div>
 </div>
 
+<!-- ========== 数値入力テンキー（端数・破壊 共通、生産記録アプリと同じ方式） ========== -->
+<div class="sheet" id="numpadSheet">
+  <div class="box">
+    <h3 id="numpadTitle">入力</h3>
+    <div class="nyuka-display" style="pointer-events:none; margin-bottom:10px;">
+      <span id="numpadDisp" class="nyuka-val empty">—</span>
+    </div>
+    <div class="numpad">
+      <div class="numpad-keys">
+        <button type="button" class="numpad-key" onclick="numpadPress('7')">7</button>
+        <button type="button" class="numpad-key" onclick="numpadPress('8')">8</button>
+        <button type="button" class="numpad-key" onclick="numpadPress('9')">9</button>
+        <button type="button" class="numpad-key" onclick="numpadPress('4')">4</button>
+        <button type="button" class="numpad-key" onclick="numpadPress('5')">5</button>
+        <button type="button" class="numpad-key" onclick="numpadPress('6')">6</button>
+        <button type="button" class="numpad-key" onclick="numpadPress('1')">1</button>
+        <button type="button" class="numpad-key" onclick="numpadPress('2')">2</button>
+        <button type="button" class="numpad-key" onclick="numpadPress('3')">3</button>
+        <button type="button" class="numpad-key numpad-key-wide" onclick="numpadPress('0')">0</button>
+        <button type="button" class="numpad-key numpad-key-del" onclick="numpadPress('del')">⌫</button>
+      </div>
+      <button type="button" class="numpad-confirm" onclick="numpadConfirm()">✔ 確定</button>
+    </div>
+    <button class="ghost full" onclick="numpadCancel()">キャンセル</button>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.4';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
+const APP_VERSION = 'v1.6';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzALEt3uPha_JbW7USYz8Q3TJnbg9gJauFe9yTEC3KqPrIqChkBLb-Tj0kt5WjqlMor/exec';
 
 const MAKERS_FALLBACK = ['大澤熔接工業所','清国溶接','小山製作所','山田鉄工所','丸磯工業所','花木製作所','羽谷工業所','伊藤プレス','メタルクリーン','マルマツ','ウエルギコウ','松原工業所','安井鉄工所','真鍋工業','向井工作所','大動工業','アクトメタル','日本グラス','エバー','トライ','村田工業所','檜山技研工業所','加藤技研工業所','トヨアケメッキ','福洋精工'];
@@ -285,6 +351,7 @@ window.addEventListener('offline', netBadge);
 /* ================= 起動 ================= */
 window.addEventListener('load', () => {
   document.getElementById('verTag').textContent = APP_VERSION;
+  document.getElementById('verFixed').textContent = APP_VERSION;
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
   netBadge();
 
@@ -730,12 +797,32 @@ function loadExtraInputs(){
   const ex = pending.extra[h] || {};
   document.getElementById('extraHasuu').value = (ex.hasuu != null ? ex.hasuu : '');
   document.getElementById('extraHakai').value = (ex.hakai != null ? ex.hakai : '');
+  updateExtraDisplays();
 }
 document.getElementById('extraHinban').addEventListener('change', loadExtraInputs);
+function updateExtraDisplays(){
+  setNyukaDisp('extraHasuuDisp', document.getElementById('extraHasuu').value);
+  setNyukaDisp('extraHakaiDisp', document.getElementById('extraHakai').value);
+}
+function setNyukaDisp(id, val){
+  const el = document.getElementById(id);
+  if (val === '' || val == null){ el.textContent = '—'; el.classList.add('empty'); }
+  else { el.textContent = val; el.classList.remove('empty'); }
+}
+// 端数・破壊パネルの各欄をタップ → 共通テンキーを開く（生産記録アプリと同じ方式）
+function openExtraNumpad(which){
+  const inputId = which === 'hasuu' ? 'extraHasuu' : 'extraHakai';
+  const label   = which === 'hasuu' ? '端数（半端箱の入数）' : '破壊数';
+  const cur = document.getElementById(inputId).value;
+  openNumpad(label, cur, function(v){
+    document.getElementById(inputId).value = (v === '' ? '' : v);
+    updateExtraDisplays();
+  });
+}
 function saveExtra(){
   const h = document.getElementById('extraHinban').value;
-  const hs = document.getElementById('extraHasuu').value.trim();
-  const hk = document.getElementById('extraHakai').value.trim();
+  const hs = document.getElementById('extraHasuu').value;
+  const hk = document.getElementById('extraHakai').value;
   const o = {};
   if (hs !== '') o.hasuu = String(parseInt(hs,10) || 0);
   if (hk !== '') o.hakai = String(parseInt(hk,10) || 0);
@@ -750,9 +837,35 @@ function clearExtra(){
   lset(K_PENDING, pending);
   document.getElementById('extraHasuu').value = '';
   document.getElementById('extraHakai').value = '';
+  updateExtraDisplays();
   renderTally();
 }
 function closeExtra(){ document.getElementById('extraSheet').classList.remove('on'); }
+
+/* ================= 共通テンキー（端数/破壊 の数値入力。生産記録アプリと同じ方式） ================= */
+let numpadBuf = '', numpadCallback = null;
+function openNumpad(title, initial, cb){
+  document.getElementById('numpadTitle').textContent = title;
+  numpadBuf = (initial != null && initial !== '') ? String(initial) : '';
+  numpadCallback = cb;
+  renderNumpadDisp();
+  document.getElementById('numpadSheet').classList.add('on');
+}
+function numpadPress(k){
+  if (k === 'del') numpadBuf = numpadBuf.slice(0, -1);
+  else numpadBuf = (numpadBuf === '0') ? k : numpadBuf + k;
+  renderNumpadDisp();
+}
+function renderNumpadDisp(){ setNyukaDisp('numpadDisp', numpadBuf); }
+function numpadConfirm(){
+  document.getElementById('numpadSheet').classList.remove('on');
+  const cb = numpadCallback; numpadCallback = null;
+  if (cb) cb(numpadBuf === '' ? '' : parseInt(numpadBuf, 10));
+}
+function numpadCancel(){
+  document.getElementById('numpadSheet').classList.remove('on');
+  numpadCallback = null;
+}
 
 /* ================= 確認 ================= */
 function goReview(){
@@ -777,21 +890,32 @@ function reviewItems(){
     return { hinban: h, mai: mai, hako: hako, youbun: youbun, suryou: suryou, hasuu: ex.hasuu || '', hakai: ex.hakai || '' };
   });
 }
+// 端数・破壊のセルはタップで共通テンキーを開く（data属性で受け渡し、エスケープ絡みの事故を避ける）
 function renderReview(){
   document.getElementById('revInfo').textContent = pending.maker + '　納入日 ' + pending.shukkaDate + '　合計 ' + pending.scans.length + '枚';
   const tb = document.getElementById('revBody');
   tb.innerHTML = reviewItems().map(function (it) {
     const h = it.hinban;
+    const hAttr = esc(h);
     return '<tr>'
       + '<td>' + esc(h) + '</td>'
       + '<td class="num">' + it.mai + '</td>'
       + '<td class="num">' + it.youbun + '</td>'
-      + '<td style="text-align:center"><input class="miniinput" type="number" inputmode="numeric" min="0" value="' + it.hasuu + '" onchange="revEdit(\'' + esc(h).replace(/\x27/g,"\\x27") + '\',\'hasuu\',this.value)"></td>'
-      + '<td style="text-align:center"><input class="miniinput" type="number" inputmode="numeric" min="0" value="' + it.hakai + '" onchange="revEdit(\'' + esc(h).replace(/\x27/g,"\\x27") + '\',\'hakai\',this.value)"></td>'
+      + '<td style="text-align:center"><span class="miniinput numtap' + (it.hasuu===''?' empty':'') + '" data-h="' + hAttr + '" data-key="hasuu">' + (it.hasuu!==''?it.hasuu:'—') + '</span></td>'
+      + '<td style="text-align:center"><span class="miniinput numtap' + (it.hakai===''?' empty':'') + '" data-h="' + hAttr + '" data-key="hakai">' + (it.hakai!==''?it.hakai:'—') + '</span></td>'
       + '<td class="num">' + it.hako + '</td>'
       + '<td class="num">' + it.suryou + '</td>'
       + '</tr>';
   }).join('');
+  tb.querySelectorAll('.numtap').forEach(function (el) {
+    el.addEventListener('click', function () {
+      const h = el.dataset.h, key = el.dataset.key;
+      const cur = (pending.extra[h] || {})[key] || '';
+      openNumpad(key === 'hasuu' ? '端数（半端箱の入数）' : '破壊数', cur, function (v) {
+        revEdit(h, key, v === '' ? '' : String(v));
+      });
+    });
+  });
 }
 function revEdit(h, key, val){
   val = String(val).trim();
@@ -924,6 +1048,38 @@ window.addEventListener('beforeunload', (e) => {
   const p = lget(K_PENDING, null);
   if (p && p.scans && p.scans.length){ e.preventDefault(); e.returnValue = ''; }
 });
+
+/* ================= 下スワイプでの引っ張り更新（pull-to-refresh）を無効化 ================= */
+/* 納品書アプリと同じ対策：一番上でさらに下にドラッグする動きだけを打ち消す。通常のスクロールは阻害しない。 */
+(function () {
+  let startY = 0;
+  document.addEventListener('touchstart', function (e) {
+    startY = e.touches[0].clientY;
+  }, { passive: true });
+  document.addEventListener('touchmove', function (e) {
+    const scrollTop = document.documentElement.scrollTop || document.body.scrollTop;
+    if (scrollTop === 0 && e.touches[0].clientY > startY) {
+      e.preventDefault();
+    }
+  }, { passive: false });
+})();
+
+/* ================= 戻る操作（スワイプ/戻るボタン）でページを離脱させない ================= */
+/* 納品書アプリと同じ pushState/popstate の対策：常にダミーの履歴を積み直し、実際の離脱は起こさせない。
+   未送信データが残っている時は確認の上でログイン画面に戻す。 */
+function pushDummyHistory(){ try { history.pushState({ ukeireScan: true }, ''); } catch (e) {} }
+window.addEventListener('popstate', function () {
+  pushDummyHistory();
+  const hasUnsent = pending && pending.scans && pending.scans.length;
+  const onLogin = document.getElementById('s-login').classList.contains('on');
+  if (onLogin) return;   // ログイン画面まで戻ってきているなら、そこは普通の画面として扱う
+  if (hasUnsent) {
+    if (confirm('未送信のデータ（' + pending.scans.length + '枚）があります。\nログイン画面に戻りますか？\n（データは保持されます）')) {
+      logout();
+    }
+  }
+});
+pushDummyHistory();
 </script>
 </body>
 </html>

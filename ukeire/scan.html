@@ -45,7 +45,10 @@
   .flash.ok { background:var(--ok); color:#06301f; }
   .flash.bad { background:var(--bad); color:#3a0d0d; }
 
-  .arm { font-size:15px; font-weight:800; margin-bottom:6px; }
+  .resultbox { font-size:16px; font-weight:800; padding:12px 14px; border-radius:12px; margin-bottom:8px; text-align:center; line-height:1.4; }
+  .resultbox.idle { background:var(--card); border:1px solid var(--line); color:var(--sub); }
+  .resultbox.ok   { background:rgba(52,211,153,.16); border:1px solid var(--ok); color:var(--ok); }
+  .resultbox.bad  { background:rgba(248,113,113,.16); border:1px solid var(--bad); color:var(--bad); }
   .bignum { text-align:center; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px; margin-bottom:8px; }
   .bignum .n { font-size:52px; font-weight:900; line-height:1; }
   .bignum .l { font-size:12px; color:var(--sub); margin-top:2px; }
@@ -129,7 +132,7 @@
     <div class="flash" id="flash"></div>
   </div>
 
-  <div class="arm" id="arm">● かざしてOK</div>
+  <div class="resultbox idle" id="resultBox">📷 かざしてください</div>
 
   <div class="bignum">
     <div class="n" id="total">0</div>
@@ -468,7 +471,7 @@ async function startCamera(){
   document.getElementById('btnPause').textContent = '⏸ 一時停止';
   running=true; lastLoopTs=0;
   try { if(!actx) actx = new (window.AudioContext||window.webkitAudioContext)(); actx.resume(); } catch(e){}
-  updateArm();
+  showResult('idle', '📷 かざしてください');
   schedule();
 }
 function resumeCamera(){ if (stream && !running){ running=true; schedule(); } else if (!stream){ startCamera(); } }
@@ -515,16 +518,21 @@ async function loop(){
   } catch(e){ dbgErr = (e.name||'')+' '+(e.message||''); }
 
   if (raw != null){ dbgLast = raw.length; emptyStreak = 0; onDecode(raw); }
-  else { emptyStreak++; if (!armed && emptyStreak >= CLEAR_FRAMES){ armed = true; updateArm(); } }
+  else {
+    emptyStreak++;
+    if (!armed && emptyStreak >= CLEAR_FRAMES){ armed = true; showResult('idle', '📷 かざしてください'); }
+  }
 
   document.getElementById('dbg').textContent =
     (useNative?'BarcodeDetector':'jsQR') + ' / ' + dbgFrame + ' / QR長 ' + dbgLast + ' / ' + dbgErr;
   schedule();
 }
-function updateArm(){
-  const el = document.getElementById('arm');
-  if (armed){ el.textContent = '● かざしてOK'; el.style.color = 'var(--ok)'; }
-  else { el.textContent = '● 読取済み — 一度はなす'; el.style.color = 'var(--sub)'; }
+// カメラ直下の結果表示：かざす前後の状態ではなく「直前の読取が成功/失敗したか＋理由」を表示する。
+// 次に空フレームが続いて再武装するまで、この表示は消えずに残る（スクロールしなくても理由が読める）。
+function showResult(kind, msg){
+  const el = document.getElementById('resultBox');
+  el.className = 'resultbox ' + kind;
+  el.textContent = msg;
 }
 
 /* ================= 読取判定（フェーズ順に判定） ================= */
@@ -542,7 +550,7 @@ function onDecode(raw){
 
   const bypass = document.getElementById('bypass').checked;
   lastAcceptTs = now;
-  acceptedRaw = raw; armed = false; updateArm();
+  acceptedRaw = raw; armed = false;   // 表示はこの後の分岐で showResult() が確定させる
 
   // ①フォーマット
   const okFormat = raw.length >= QR_MIN && raw.length <= QR_MAX
@@ -561,7 +569,7 @@ function onDecode(raw){
   }
 
   const hinban = raw.substring(38, 63).trim();
-  const tori   = raw.substring(20, 25).trim();
+  const tori   = raw.substring(21, 26).trim();  // 取引先コード：5桁固定（38,63の品番と違い前後に余白が無いため位置ズレがそのまま出る）
 
   // ③別メーカー（取引先コード不一致）
   if (!bypass && toriSet && tori && !toriSet.has(tori)){
@@ -586,17 +594,18 @@ function onDecode(raw){
   qrSeen.add(raw);
   lset(K_PENDING, pending);
   flash('ok', 'OK');
+  showResult('ok', '✅ 読み取りOK　品番「' + (hinban || '(空)') + '」　今回の合計 ' + pending.scans.length + '枚');
   if (document.getElementById('beepOn').checked) beep(1250, .12);
   if (document.getElementById('vibOn').checked && navigator.vibrate) navigator.vibrate(55);
   renderTally();
 }
 function reject(kind, msg){
   flash('bad', REJ_LABEL[kind] || '×');
+  showResult('bad', '❌ ' + msg);
   if (document.getElementById('beepOn').checked) beep(320, .18);
   if (document.getElementById('vibOn').checked && navigator.vibrate) navigator.vibrate([40,40,40]);
   const box = document.getElementById('rejBox');
-  box.textContent = msg
-    + '　（重複 ' + rejCounts.dup + ' / マスタ外 ' + rejCounts.master + ' / 他社 ' + rejCounts.tori + ' / 形式 ' + rejCounts.format + '）';
+  box.textContent = '弾いた累計：重複 ' + rejCounts.dup + ' / マスタ外 ' + rejCounts.master + ' / 他社 ' + rejCounts.tori + ' / 形式 ' + rejCounts.format;
 }
 
 /* ================= 取消 ================= */

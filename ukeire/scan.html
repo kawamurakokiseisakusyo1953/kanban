@@ -57,6 +57,8 @@
   .badge { background:var(--line); border-radius:20px; padding:5px 12px; font-weight:700; white-space:nowrap; }
   .badge.warn { background:rgba(251,191,36,.18); color:var(--warn); border:1px solid var(--warn); }
   .badge.off  { background:rgba(248,113,113,.18); color:var(--bad); border:1px solid var(--bad); }
+  .badge.tap  { cursor:pointer; border:1px solid var(--accent); }
+  .badge.tap:active { opacity:.7; }
 
   table { width:100%; border-collapse:collapse; font-size:14px; }
   th,td { text-align:left; padding:9px 6px; border-bottom:1px solid var(--line); }
@@ -101,6 +103,9 @@
     <label class="fld">パスワード</label>
     <input type="password" id="loginPw" autocomplete="current-password">
     <button class="primary full" id="loginBtn" onclick="doLogin()">ログイン</button>
+    <div id="loginLoading" style="display:none;text-align:center;padding:10px 0 0;">
+      <span class="sub">🔄 認証・マスタ読み込み中…しばらくお待ちください</span>
+    </div>
     <div class="note">初回のみネット接続が必要です。以降はオフラインで読取できます。</div>
   </div>
   <div id="err"></div>
@@ -110,6 +115,7 @@
 <div class="screen" id="s-date">
   <h1>納入日を選択</h1>
   <div class="sub" id="dateMakerInfo">—</div>
+  <div id="datePendingBanner" class="resume" style="display:none;"></div>
   <div class="card">
     <div style="font-size:13px;color:var(--sub);margin-bottom:8px;">デフォルト（メーカー設定）が選択済みです。変更する場合は下から選択。</div>
     <div class="datelist" id="dateList"></div>
@@ -121,8 +127,8 @@
 <!-- ========== スキャン ========== -->
 <div class="screen" id="s-scan">
   <div class="hd">
-    <span class="badge" id="scMaker">—</span>
-    <span class="badge" id="scDate">—</span>
+    <span class="badge tap" id="scMaker" onclick="confirmSwitchMaker()">—</span>
+    <span class="badge tap" id="scDate" onclick="backToDate()">—</span>
     <span class="badge" id="scNet">—</span>
   </div>
   <div id="dbg">—</div>
@@ -222,7 +228,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.2';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
+const APP_VERSION = 'v1.4';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzALEt3uPha_JbW7USYz8Q3TJnbg9gJauFe9yTEC3KqPrIqChkBLb-Tj0kt5WjqlMor/exec';
 
 const MAKERS_FALLBACK = ['大澤熔接工業所','清国溶接','小山製作所','山田鉄工所','丸磯工業所','花木製作所','羽谷工業所','伊藤プレス','メタルクリーン','マルマツ','ウエルギコウ','松原工業所','安井鉄工所','真鍋工業','向井工作所','大動工業','アクトメタル','日本グラス','エバー','トライ','村田工業所','檜山技研工業所','加藤技研工業所','トヨアケメッキ','福洋精工'];
@@ -287,21 +293,35 @@ window.addEventListener('load', () => {
   const makers = (auth && auth.makers && auth.makers.length) ? auth.makers : MAKERS_FALLBACK;
   sel.innerHTML = '<option value="">選択してください</option>' + makers.map(m => '<option>'+esc(m)+'</option>').join('');
 
-  if (auth){
-    sel.value = auth.maker || '';
-    document.getElementById('loginPw').value = auth.pw || '';
-    setAuthSets();
-  }
-  // 未送信の復帰
   pending = lget(K_PENDING, null);
-  if (pending && pending.scans && pending.scans.length && auth){
-    const rb = document.getElementById('resumeBox');
-    rb.style.display = 'block';
-    rb.innerHTML = '未送信 ' + pending.scans.length + '枚（' + esc(auth.maker) + ' / ' + esc(pending.shukkaDate) + '）'
-      + '<br><button class="primary full" onclick="resumePending()">確認・送信する</button>'
-      + '<button class="ghost full" onclick="discardPending()">破棄する</button>';
+
+  // ログイン済み（記憶が有効期限内）なら、ログイン画面を自動スキップして納入日画面へ。
+  // 期限切れなら入力欄だけ埋めて、通常のログイン画面を出す（再認証を促す）。
+  if (auth && (Date.now() - (auth.ts || 0)) < AUTH_MAX_AGE_MS){
+    setAuthSets();
+    enterDateScreen();
+  } else {
+    if (auth){
+      sel.value = auth.maker || '';
+      document.getElementById('loginPw').value = auth.pw || '';
+    }
+    renderResumeBoxOnLogin();
   }
 });
+
+// ログイン画面用：ログインしていない状態で未送信データが残っている場合の案内
+function renderResumeBoxOnLogin(){
+  const rb = document.getElementById('resumeBox');
+  if (pending && pending.scans && pending.scans.length){
+    rb.style.display = 'block';
+    rb.innerHTML = 'メーカー「' + esc(pending.maker || '不明') + '」の未送信データ ' + pending.scans.length + '枚（' + esc(pending.shukkaDate) + '）があります。'
+      + '<br>そのメーカーでログインしてから送信してください。'
+      + '<br><button class="ghost full" onclick="discardPending()">このデータを破棄する</button>';
+    if (pending.maker) document.getElementById('loginMaker').value = pending.maker;
+  } else {
+    rb.style.display = 'none';
+  }
+}
 
 function setAuthSets(){
   // hinbanReady が false（品番タブ未整備）なら hinbanSet は null にして照合スキップ。
@@ -318,8 +338,9 @@ function resumePending(){
 }
 function discardPending(){
   if (!confirm('未送信データを破棄します。よろしいですか？')) return;
-  ldel(K_PENDING); pending = null;
-  document.getElementById('resumeBox').style.display = 'none';
+  ldel(K_PENDING); pending = null; qrSeen = new Set();
+  const rb = document.getElementById('resumeBox'); if (rb) rb.style.display = 'none';
+  const db = document.getElementById('datePendingBanner'); if (db) db.style.display = 'none';
 }
 
 /* ================= ログイン ================= */
@@ -331,12 +352,16 @@ function doLogin(){
   if (!maker || !pw){ err.textContent = 'メーカーとパスワードを入力してください'; return; }
 
   const btn = document.getElementById('loginBtn');
+  const loading = document.getElementById('loginLoading');
   btn.disabled = true; btn.textContent = 'ログイン中...';
+  loading.style.display = 'block';
+
+  function finishLoading(){ btn.disabled = false; btn.textContent = 'ログイン'; loading.style.display = 'none'; }
 
   fetch(GAS_URL, { method:'POST', headers:{'Content-Type':'text/plain'},
                    body: JSON.stringify({ action:'login', maker: maker, pw: pw }) })
     .then(r => r.json()).then(res => {
-    btn.disabled = false; btn.textContent = 'ログイン';
+    finishLoading();
     if (!res.ok){ err.textContent = res.message || 'ログイン失敗'; return; }
     auth = {
       maker: res.maker, pw: pw, offset: res.offset || 0,
@@ -347,7 +372,7 @@ function doLogin(){
     setAuthSets();
     enterDateScreen();
   }).catch(e => {
-    btn.disabled = false; btn.textContent = 'ログイン';
+    finishLoading();
     // オフライン：記憶ログインで通す
     if (auth && auth.maker === maker && auth.pw === pw && (Date.now() - (auth.ts||0)) < AUTH_MAX_AGE_MS){
       setAuthSets();
@@ -367,6 +392,11 @@ function logout(){
   show('s-login');
   location.reload();
 }
+// スキャン画面のメーカーバッジから：ログイン画面に戻る（＝メーカー切替の入口）。読取中データは保持される。
+function confirmSwitchMaker(){
+  if (!confirm('ログイン画面に戻ります（メーカーを切り替えられます）。\n読取中のデータは保持されます。よろしいですか？')) return;
+  logout();
+}
 
 /* ================= 納入日 ================= */
 function addBusinessDays(base, n){
@@ -384,9 +414,27 @@ function jpDate(d){
   return (d.getMonth()+1) + '/' + d.getDate() + '（' + w + '）';
 }
 
+// 納入日画面で「未送信データがある」ことを常に見えるようにする。
+// 今ログイン中のメーカーのものなら確認・送信の導線、別メーカーのものなら混在しないよう警告する。
+function renderPendingBanner(){
+  const el = document.getElementById('datePendingBanner');
+  if (!pending || !pending.scans || !pending.scans.length){ el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  if (pending.maker === auth.maker){
+    el.innerHTML = '📦 未送信 ' + pending.scans.length + '枚（納入日 ' + esc(pending.shukkaDate) + '）があります。'
+      + '<br><button class="primary full" onclick="resumePending()">確認・送信する</button>';
+  } else {
+    el.innerHTML = '⚠️ 別メーカー「' + esc(pending.maker) + '」の未送信データ ' + pending.scans.length + '枚が残っています。'
+      + '<br>送信するには一度「' + esc(pending.maker) + '」でログインし直してください。'
+      + '<br><button class="ghost full" onclick="logout()">ログイン画面へ</button>'
+      + '<button class="ghost full" onclick="discardPending()">このデータを破棄する</button>';
+  }
+}
+
 function enterDateScreen(){
   document.getElementById('dateMakerInfo').textContent = auth.maker
     + '　品番マスタ: ' + (auth.hinbanReady ? (auth.hinban.length + '件') : '未整備（照合スキップ）');
+  renderPendingBanner();
   const today = new Date();
   const def = addBusinessDays(today, auth.offset || 0);
   const defStr = fmtDate(def);
@@ -421,18 +469,25 @@ function enterDateScreen(){
 /* ================= スキャン開始 ================= */
 function startScanning(){
   if (!chosenDate){ alert('納入日を選択してください'); return; }
-  // 別メーカー/別日の未送信が残っていたら警告
-  if (pending && pending.scans && pending.scans.length &&
-      (pending.shukkaDate !== chosenDate)){
+  const hasPending = pending && pending.scans && pending.scans.length;
+
+  // 別メーカーの未送信データがある間は、新しい読取を始めさせない（混在・誤送信防止）。
+  // 送信するには一度そのメーカーでログインし直す必要がある（納入日画面の案内から）。
+  if (hasPending && pending.maker !== auth.maker){
+    alert('別メーカー「' + pending.maker + '」の未送信データ（' + pending.shukkaDate + ' / ' + pending.scans.length + '枚）が残っています。\nそちらを送信するか破棄してから、読取を始めてください。\n（この画面上部の案内から操作できます）');
+    return;
+  }
+  // 同じメーカーで別の納入日の未送信が残っていたら警告
+  if (hasPending && pending.shukkaDate !== chosenDate){
     if (!confirm('未送信データ（' + pending.shukkaDate + ' / ' + pending.scans.length + '枚）があります。\n先に送信することを推奨します。\nこのまま新しい読取を始めますか？（未送信は保持されます）')) return;
   }
-  if (!pending || pending.shukkaDate !== chosenDate){
-    pending = { shukkaDate: chosenDate, scans: [], extra: {} };
+  if (!pending || pending.maker !== auth.maker || pending.shukkaDate !== chosenDate){
+    pending = { maker: auth.maker, shukkaDate: chosenDate, scans: [], extra: {} };
     lset(K_PENDING, pending);
   }
   rebuildQrSeen();
-  document.getElementById('scMaker').textContent = auth.maker;
-  document.getElementById('scDate').textContent = chosenDate;
+  document.getElementById('scMaker').textContent = auth.maker + ' ▾';
+  document.getElementById('scDate').textContent = chosenDate + ' ▾';
   netBadge();
   renderTally();
   show('s-scan');
@@ -723,7 +778,7 @@ function reviewItems(){
   });
 }
 function renderReview(){
-  document.getElementById('revInfo').textContent = auth.maker + '　納入日 ' + pending.shukkaDate + '　合計 ' + pending.scans.length + '枚';
+  document.getElementById('revInfo').textContent = pending.maker + '　納入日 ' + pending.shukkaDate + '　合計 ' + pending.scans.length + '枚';
   const tb = document.getElementById('revBody');
   tb.innerHTML = reviewItems().map(function (it) {
     const h = it.hinban;
@@ -771,20 +826,24 @@ function doSend(){
   const err = document.getElementById('err2');
   err.textContent = '';
   if (!navigator.onLine){ err.textContent = 'オフラインです。ネットに繋いでから送信してください。（データは保持されています）'; return; }
+  if (pending.maker !== auth.maker){
+    err.textContent = 'このデータはメーカー「' + pending.maker + '」のものです。一度そのメーカーでログインし直してください。';
+    return;
+  }
   btn.disabled = true; btn.textContent = '送信中...';
-  const payload = { maker: auth.maker, pw: auth.pw, shukkaDate: pending.shukkaDate, rows: buildRows() };
+  const payload = { maker: pending.maker, pw: auth.pw, shukkaDate: pending.shukkaDate, rows: buildRows() };
   const itemsSnapshot = reviewItems();   // pendingを消す前に品番別内訳を保存しておく（履歴用）
   fetch(GAS_URL, { method:'POST', headers:{'Content-Type':'text/plain'}, body: JSON.stringify(payload) })
     .then(r => r.json()).then(res => {
       btn.disabled = false; btn.textContent = '送信（ネット必要）';
       if (!res.ok){ err.textContent = 'エラー: ' + (res.message || '不明'); return; }
       const hist = lget(K_HIST, []);
-      hist.unshift({ sentAt: new Date().toISOString(), maker: auth.maker, shukkaDate: pending.shukkaDate, rows: res.added, items: itemsSnapshot });
+      hist.unshift({ sentAt: new Date().toISOString(), maker: payload.maker, shukkaDate: pending.shukkaDate, rows: res.added, items: itemsSnapshot });
       lset(K_HIST, hist.slice(0, 50));
       ldel(K_PENDING); pending = null; qrSeen = new Set();
       document.getElementById('doneTitle').textContent = '送信完了';
       document.getElementById('doneBody').innerHTML =
-        auth.maker + '<br>納入日 ' + payload.shukkaDate + '<br>追記 ' + res.added + ' 行<br><br>納品書アプリ側で「QRデータ取込」してください。';
+        payload.maker + '<br>納入日 ' + payload.shukkaDate + '<br>追記 ' + res.added + ' 行<br><br>納品書アプリ側で「QRデータ取込」してください。';
       stopCamera();
       show('s-done');
     })

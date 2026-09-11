@@ -28,12 +28,28 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // それ以外（scan.html / jsQR）はキャッシュ優先＋裏で更新
+  const isAppShell = (url.origin === self.location.origin);   // scan.html など、このサイト自身のファイル
+
+  if (isAppShell) {
+    // アプリ本体は「ネット優先」：オンラインなら必ず最新を取得（更新の反映漏れを防ぐ）。
+    // オフラインの時だけキャッシュにフォールバック。
+    e.respondWith(
+      fetch(req).then((res) => {
+        if (res && res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(req, copy));
+        }
+        return res;
+      }).catch(() => caches.match(req).then((hit) => hit || caches.match('scan.html')))
+    );
+    return;
+  }
+
+  // それ以外（jsQRのCDN等）はキャッシュ優先＋裏で更新（オフライン動作の要）
   e.respondWith(
     caches.match(req).then((hit) => {
       const net = fetch(req).then((res) => {
-        if (res && res.ok &&
-            (url.origin === self.location.origin || url.hostname.indexOf('jsdelivr') !== -1)) {
+        if (res && res.ok) {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put(req, copy));
         }

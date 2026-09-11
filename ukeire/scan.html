@@ -138,8 +138,12 @@
 
   <div class="row">
     <button id="btnExtra" onclick="openExtra()" disabled>端数・破壊</button>
+    <button class="ghost" id="btnUndo" onclick="undoLast()" disabled>↩ 直前取消</button>
+  </div>
+  <div class="row">
     <button class="ghost" id="btnTorch" onclick="toggleTorch()" disabled>🔦 ライト</button>
     <button class="ghost" id="btnPause" onclick="togglePause()">⏸ 一時停止</button>
+    <button class="ghost" onclick="openHistory()">📋 履歴</button>
   </div>
   <button class="ok full" onclick="goReview()">読取おわり・確認へ</button>
 
@@ -156,6 +160,14 @@
     <div id="rejBox" class="note" style="color:var(--bad);"></div>
   </div>
   <button class="ghost full" onclick="backToDate()">← 納入日にもどる</button>
+</div>
+
+<!-- ========== 読取履歴 ========== -->
+<div class="screen" id="s-history">
+  <h1>読取履歴</h1>
+  <div class="sub" id="histInfo">—</div>
+  <div class="card" id="histList"></div>
+  <button class="ghost full" onclick="closeHistory()">← もどる</button>
 </div>
 
 <!-- ========== 確認 ========== -->
@@ -232,8 +244,13 @@ function deviceId(){
 let auth = lget(K_AUTH, null);            // {maker,pw,offset,hinbanReady,hinban:[],torihiki:[],makers:[],ts}
 let pending = lget(K_PENDING, null);      // {shukkaDate, scans:[{ts,qr,hinban}], extra:{hinban:{hasuu,hakai}}}
 let hinbanSet = null, toriSet = null;
+let qrSeen = new Set();                   // このpending内で既に受理した生QR（2度読み検知用）
 let chosenDate = '';                      // yyyy/MM/dd
 let scanSeq = 0;
+
+function rebuildQrSeen(){
+  qrSeen = new Set((pending && pending.scans ? pending.scans : []).map(s => s.qr));
+}
 
 /* ================= 画面遷移 ================= */
 function show(id){
@@ -280,12 +297,15 @@ window.addEventListener('load', () => {
 });
 
 function setAuthSets(){
-  hinbanSet = (auth && auth.hinban) ? new Set(auth.hinban.map(x=>String(x).trim())) : null;
+  // hinbanReady が false（品番タブ未整備）なら hinbanSet は null にして照合スキップ。
+  // auth.hinban は空配列 [] でも真値になるため、配列そのものでは判定しない。
+  hinbanSet = (auth && auth.hinbanReady) ? new Set((auth.hinban || []).map(x=>String(x).trim())) : null;
   toriSet   = (auth && auth.torihiki && auth.torihiki.length) ? new Set(auth.torihiki.map(x=>String(x).trim())) : null;
 }
 
 function resumePending(){
   chosenDate = pending.shukkaDate;
+  rebuildQrSeen();
   renderReview();
   show('s-review');
 }
@@ -403,6 +423,7 @@ function startScanning(){
     pending = { shukkaDate: chosenDate, scans: [], extra: {} };
     lset(K_PENDING, pending);
   }
+  rebuildQrSeen();
   document.getElementById('scMaker').textContent = auth.maker;
   document.getElementById('scDate').textContent = chosenDate;
   netBadge();
@@ -506,8 +527,11 @@ function updateArm(){
   else { el.textContent = '● 読取済み — 一度はなす'; el.style.color = 'var(--sub)'; }
 }
 
-/* ================= 読取判定 ================= */
-let rejCounts = { master:0, tori:0, format:0 };
+/* ================= 読取判定（フェーズ順に判定） ================= */
+// ① QR形式チェック → ② 2度読み（このpending内でのQR内容重複）→ ③ 別メーカー（取引先コード）→ ④ 品番マスタ不一致
+let rejCounts = { format:0, dup:0, tori:0, master:0 };
+const REJ_LABEL = { format:'NG', dup:'重複', tori:'他社', master:'マスタ外' };
+
 function onDecode(raw){
   const now = performance.now();
   if (now - lastAcceptTs < FLOOR_MS) return;
@@ -516,23 +540,41 @@ function onDecode(raw){
     else return;
   }
 
-  const okFormat = raw.length >= QR_MIN && raw.length <= QR_MAX
-                && raw.slice(0,8) === '20110607' && raw.indexOf('000.0') !== -1;
-  const hinban = raw.substring(38, 63).trim();
-  const tori   = raw.substring(20, 25).trim();
   const bypass = document.getElementById('bypass').checked;
-
   lastAcceptTs = now;
   acceptedRaw = raw; armed = false; updateArm();
 
+  // ①フォーマット
+  const okFormat = raw.length >= QR_MIN && raw.length <= QR_MAX
+                && raw.slice(0,8) === '20110607' && raw.indexOf('000.0') !== -1;
   if (!okFormat){
-    rejCounts.format++; reject('対象外QR（長さ ' + raw.length + '）'); return;
+    rejCounts.format++;
+    reject('format', '読取エラー：QRの形式が不正です。再スキャンしてください（長さ ' + raw.length + '）');
+    return;
   }
-  if (!bypass && hinbanSet && !hinbanSet.has(hinban)){
-    rejCounts.master++; reject('マスタ外の品番: ' + (hinban || '(空)')); return;
+
+  // ②2度読み（ローカルに保存済みの生QRと完全一致）
+  if (qrSeen.has(raw)){
+    rejCounts.dup++;
+    reject('dup', '重複エラー：このかんばんは読み取り済みです。再スキャンしないでください');
+    return;
   }
+
+  const hinban = raw.substring(38, 63).trim();
+  const tori   = raw.substring(20, 25).trim();
+
+  // ③別メーカー（取引先コード不一致）
   if (!bypass && toriSet && tori && !toriSet.has(tori)){
-    rejCounts.tori++; reject('別メーカーの札（取引先 ' + tori + '）'); return;
+    rejCounts.tori++;
+    reject('tori', '別メーカーの札です（取引先コード ' + tori + '）。再スキャンして下さい');
+    return;
+  }
+
+  // ④品番マスタ不一致
+  if (!bypass && hinbanSet && !hinbanSet.has(hinban)){
+    rejCounts.master++;
+    reject('master', '品番マスタ不一致：品番「' + (hinban || '(空)') + '」はマスタにありません。再スキャンして下さい');
+    return;
   }
 
   // 受理
@@ -541,20 +583,39 @@ function onDecode(raw){
            + '.' + String(d.getMilliseconds()).padStart(3,'0')
            + '/' + deviceId() + '-' + (++scanSeq);
   pending.scans.push({ ts: ts, qr: raw, hinban: hinban });
+  qrSeen.add(raw);
   lset(K_PENDING, pending);
   flash('ok', 'OK');
   if (document.getElementById('beepOn').checked) beep(1250, .12);
   if (document.getElementById('vibOn').checked && navigator.vibrate) navigator.vibrate(55);
-  document.getElementById('btnExtra').disabled = false;
   renderTally();
 }
-function reject(msg){
-  flash('bad', '×');
+function reject(kind, msg){
+  flash('bad', REJ_LABEL[kind] || '×');
   if (document.getElementById('beepOn').checked) beep(320, .18);
   if (document.getElementById('vibOn').checked && navigator.vibrate) navigator.vibrate([40,40,40]);
   const box = document.getElementById('rejBox');
-  box.textContent = '弾いた: ' + msg
-    + '　（マスタ外 ' + rejCounts.master + ' / 別メーカー ' + rejCounts.tori + ' / 対象外 ' + rejCounts.format + '）';
+  box.textContent = msg
+    + '　（重複 ' + rejCounts.dup + ' / マスタ外 ' + rejCounts.master + ' / 他社 ' + rejCounts.tori + ' / 形式 ' + rejCounts.format + '）';
+}
+
+/* ================= 取消 ================= */
+function undoLast(){
+  if (!pending || !pending.scans.length) return;
+  const last = pending.scans[pending.scans.length - 1];
+  if (!confirm('直前の読取を取り消します。\n品番: ' + last.hinban + '\nよろしいですか？')) return;
+  pending.scans.pop();
+  qrSeen.delete(last.qr);
+  const stillHas = pending.scans.some(s => s.hinban === last.hinban);
+  if (!stillHas) delete pending.extra[last.hinban];
+  lset(K_PENDING, pending);
+  renderTally();
+}
+function updateUndoBtn(){
+  const btn = document.getElementById('btnUndo');
+  const has = !!(pending && pending.scans && pending.scans.length);
+  btn.disabled = !has;
+  document.getElementById('btnExtra').disabled = !has;
 }
 
 /* ================= タリー ================= */
@@ -577,6 +638,7 @@ function renderTally(){
       + '<td>' + esc(h) + (tag.length ? ' <span style="color:var(--warn);font-size:12px;">'+tag.join(' ')+'</span>' : '') + '</td>'
       + '<td class="num">' + m[h] + '</td></tr>';
   }).join('');
+  updateUndoBtn();
 }
 
 /* ================= 端数/破壊 ================= */
@@ -629,21 +691,27 @@ function goReview(){
   renderReview();
   show('s-review');
 }
-function renderReview(){
-  document.getElementById('revInfo').textContent = auth.maker + '　納入日 ' + pending.shukkaDate + '　合計 ' + pending.scans.length + '枚';
+// 品番別の集計行（品番・枚数・箱数・端数・破壊）を1箇所にまとめる。確認画面・履歴保存の両方で使う。
+function reviewItems(){
   const m = tallyMap();
-  const keys = Object.keys(m).sort();
-  const tb = document.getElementById('revBody');
-  tb.innerHTML = keys.map(h => {
+  return Object.keys(m).sort().map(function (h) {
     const ex = pending.extra[h] || {};
     const mai = m[h];
     const hako = (ex.hasuu && Number(ex.hasuu) > 0) ? (mai - 1) : mai;
+    return { hinban: h, mai: mai, hako: hako, hasuu: ex.hasuu || '', hakai: ex.hakai || '' };
+  });
+}
+function renderReview(){
+  document.getElementById('revInfo').textContent = auth.maker + '　納入日 ' + pending.shukkaDate + '　合計 ' + pending.scans.length + '枚';
+  const tb = document.getElementById('revBody');
+  tb.innerHTML = reviewItems().map(function (it) {
+    const h = it.hinban;
     return '<tr>'
       + '<td>' + esc(h) + '</td>'
-      + '<td class="num">' + mai + '</td>'
-      + '<td style="text-align:center"><input class="miniinput" type="number" inputmode="numeric" min="0" value="' + (ex.hasuu!=null?ex.hasuu:'') + '" onchange="revEdit(\'' + esc(h).replace(/\x27/g,"\\x27") + '\',\'hasuu\',this.value)"></td>'
-      + '<td style="text-align:center"><input class="miniinput" type="number" inputmode="numeric" min="0" value="' + (ex.hakai!=null?ex.hakai:'') + '" onchange="revEdit(\'' + esc(h).replace(/\x27/g,"\\x27") + '\',\'hakai\',this.value)"></td>'
-      + '<td class="num">' + hako + '</td>'
+      + '<td class="num">' + it.mai + '</td>'
+      + '<td style="text-align:center"><input class="miniinput" type="number" inputmode="numeric" min="0" value="' + it.hasuu + '" onchange="revEdit(\'' + esc(h).replace(/\x27/g,"\\x27") + '\',\'hasuu\',this.value)"></td>'
+      + '<td style="text-align:center"><input class="miniinput" type="number" inputmode="numeric" min="0" value="' + it.hakai + '" onchange="revEdit(\'' + esc(h).replace(/\x27/g,"\\x27") + '\',\'hakai\',this.value)"></td>'
+      + '<td class="num">' + it.hako + '</td>'
       + '</tr>';
   }).join('');
 }
@@ -682,14 +750,15 @@ function doSend(){
   if (!navigator.onLine){ err.textContent = 'オフラインです。ネットに繋いでから送信してください。（データは保持されています）'; return; }
   btn.disabled = true; btn.textContent = '送信中...';
   const payload = { maker: auth.maker, pw: auth.pw, shukkaDate: pending.shukkaDate, rows: buildRows() };
+  const itemsSnapshot = reviewItems();   // pendingを消す前に品番別内訳を保存しておく（履歴用）
   fetch(GAS_URL, { method:'POST', headers:{'Content-Type':'text/plain'}, body: JSON.stringify(payload) })
     .then(r => r.json()).then(res => {
       btn.disabled = false; btn.textContent = '送信（ネット必要）';
       if (!res.ok){ err.textContent = 'エラー: ' + (res.message || '不明'); return; }
       const hist = lget(K_HIST, []);
-      hist.unshift({ sentAt: new Date().toISOString(), maker: auth.maker, shukkaDate: pending.shukkaDate, rows: res.added });
+      hist.unshift({ sentAt: new Date().toISOString(), maker: auth.maker, shukkaDate: pending.shukkaDate, rows: res.added, items: itemsSnapshot });
       lset(K_HIST, hist.slice(0, 50));
-      ldel(K_PENDING); pending = null;
+      ldel(K_PENDING); pending = null; qrSeen = new Set();
       document.getElementById('doneTitle').textContent = '送信完了';
       document.getElementById('doneBody').innerHTML =
         auth.maker + '<br>納入日 ' + payload.shukkaDate + '<br>追記 ' + res.added + ' 行<br><br>納品書アプリ側で「QRデータ取込」してください。';
@@ -700,6 +769,37 @@ function doSend(){
       btn.disabled = false; btn.textContent = '送信（ネット必要）';
       err.textContent = '送信できませんでした（通信エラー）。データは保持されています。もう一度お試しください。\n' + e.message;
     });
+}
+
+/* ================= 読取履歴（送信済み） ================= */
+let pausedBeforeHistory = false;
+function openHistory(){
+  pausedBeforeHistory = paused;
+  paused = true;
+  const hist = lget(K_HIST, []).filter(h => !auth || h.maker === auth.maker);
+  document.getElementById('histInfo').textContent = (auth ? auth.maker : '') + '　送信済み ' + hist.length + '件（新しい順）';
+  const box = document.getElementById('histList');
+  if (!hist.length){
+    box.innerHTML = '<div class="note">送信履歴がありません</div>';
+  } else {
+    box.innerHTML = hist.map(function (h) {
+      const dtStr = new Date(h.sentAt).toLocaleString('ja-JP');
+      const rows = (h.items || []).map(function (it) {
+        return '<tr><td>' + esc(it.hinban) + '</td><td class="num">' + it.hako + '</td><td class="num">' + it.mai + '</td></tr>';
+      }).join('');
+      return '<div style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--line);">'
+        + '<div style="font-weight:800;">📅 納入日 ' + esc(h.shukkaDate) + '</div>'
+        + '<div class="sub" style="margin-bottom:6px;">送信 ' + dtStr + '　' + (h.rows||0) + '行</div>'
+        + '<table><thead><tr><th>品番</th><th style="text-align:right">箱数</th><th style="text-align:right">数量</th></tr></thead><tbody>' + rows + '</tbody></table>'
+        + '</div>';
+    }).join('');
+  }
+  show('s-history');
+}
+function closeHistory(){
+  paused = pausedBeforeHistory;
+  document.getElementById('btnPause').textContent = paused ? '▶ 再開' : '⏸ 一時停止';
+  show('s-scan');
 }
 
 /* ================= 一時停止 / ライト ================= */

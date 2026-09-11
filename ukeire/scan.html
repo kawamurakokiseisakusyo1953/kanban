@@ -569,7 +569,7 @@ function onDecode(raw){
   }
 
   const hinban = raw.substring(38, 63).trim();
-  const tori   = raw.substring(21, 26).trim();  // 取引先コード：5桁固定（38,63の品番と違い前後に余白が無いため位置ズレがそのまま出る）
+  const tori   = raw.substring(20, 26).trim();  // 取引先コード：6文字幅（viewer_v5.py の TORIHIKISAKI_START/END = 20/26 と同じ）
 
   // ③別メーカー（取引先コード不一致）
   if (!bypass && toriSet && tori && !toriSet.has(tori)){

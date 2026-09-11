@@ -50,9 +50,6 @@
   .resultbox.idle { background:var(--card); border:1px solid var(--line); color:var(--sub); }
   .resultbox.ok   { background:rgba(22,163,74,.10); border:1px solid var(--ok); color:var(--ok); }
   .resultbox.bad  { background:rgba(220,38,38,.10); border:1px solid var(--bad); color:var(--bad); }
-  .bignum { text-align:center; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px; margin-bottom:8px; }
-  .bignum .n { font-size:52px; font-weight:900; line-height:1; }
-  .bignum .l { font-size:12px; color:var(--sub); margin-top:2px; }
 
   .hd { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px; font-size:13px; }
   .badge { background:var(--line); border-radius:20px; padding:5px 12px; font-weight:700; white-space:nowrap; }
@@ -199,11 +196,6 @@
 
   <div class="resultbox idle" id="resultBox">📷 かざしてください</div>
 
-  <div class="bignum">
-    <div class="n" id="total">0</div>
-    <div class="l">読取枚数（合計）</div>
-  </div>
-
   <div class="row">
     <button id="btnExtra" onclick="openExtra()" disabled>端数・破壊</button>
     <button class="ghost" id="btnUndo" onclick="undoLast()" disabled>↩ 直前取消</button>
@@ -328,7 +320,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.12';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
+const APP_VERSION = 'v1.14';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzALEt3uPha_JbW7USYz8Q3TJnbg9gJauFe9yTEC3KqPrIqChkBLb-Tj0kt5WjqlMor/exec';
 
 const MAKERS_FALLBACK = ['大澤熔接工業所','清国溶接','小山製作所','山田鉄工所','丸磯工業所','花木製作所','羽谷工業所','伊藤プレス','メタルクリーン','マルマツ','ウエルギコウ','松原工業所','安井鉄工所','真鍋工業','向井工作所','大動工業','アクトメタル','日本グラス','エバー','トライ','村田工業所','檜山技研工業所','加藤技研工業所','トヨアケメッキ','福洋精工'];
@@ -649,7 +641,7 @@ function refreshResultForLastHinban(){
   const hakoNow = hasuuNow > 0 ? (arr.length - 1) : arr.length;
   const youbun = arr[0].youbun || 0;
   const suryouNow = hakoNow * youbun + hasuuNow;
-  showResult('ok', '✅ 品番「' + esc(lastScannedHinban) + '」<br>この品番の累積 ' + arr.length + '枚（' + hakoNow + '箱 / 約' + suryouNow + '個）<br><span class="sub">全体合計 ' + pending.scans.length + '枚</span>');
+  showResult('ok', '✅ 品番「' + esc(lastScannedHinban) + '」<br>この品番の累積 ' + arr.length + '枚（' + hakoNow + '箱 / ' + suryouNow + '個）<br><span class="sub">全体合計 ' + pending.scans.length + '枚</span>');
 }
 function stopCamera(){
   running=false;
@@ -816,7 +808,6 @@ function tallyMap(){
 function renderTally(){
   const m = tallyMap();
   const keys = Object.keys(m).sort();
-  document.getElementById('total').textContent = pending.scans.length;
   const tb = document.getElementById('tally');
   tb.innerHTML = keys.map(h => {
     const ex = pending.extra[h] || {};
@@ -881,6 +872,7 @@ function saveExtra(){
   if (Object.keys(o).length) pending.extra[h] = o; else delete pending.extra[h];
   lset(K_PENDING, pending);
   renderTally();
+  if (h === lastScannedHinban) refreshResultForLastHinban();
   closeExtra();
 }
 function clearExtra(){
@@ -894,6 +886,7 @@ function clearExtra(){
     document.getElementById('extraHakai').value = '';
     updateExtraDisplays();
     renderTally();
+    if (h === lastScannedHinban) refreshResultForLastHinban();
   });
 }
 function closeExtra(){ document.getElementById('extraSheet').classList.remove('on'); }

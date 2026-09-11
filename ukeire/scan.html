@@ -73,16 +73,23 @@
   .miniinput:active { background:rgba(0,0,0,.05); }
   .miniinput.empty { color:var(--sub); font-weight:400; }
 
-  /* 確認画面：品番1件＝1行のコンパクト表（100品番でも見渡せるように）。数量は太字で強調。 */
+  /* 確認画面：品番1件＝1行のコンパクト表（100品番でも見渡せるように）。数量は太字で強調。
+     6列（品番/箱数/端数/破壊/数量/×）を画面幅に収める＝横スクロール不要にするため、
+     min-widthは指定せず、余白・文字サイズを詰めて table-layout:fixed で列幅を固定する。 */
   .rev-wrap { overflow-x:auto; }
-  .rev-table { width:100%; min-width:420px; border-collapse:collapse; font-size:13px; }
-  .rev-table th { text-align:right; color:var(--sub); font-size:11px; padding:6px 4px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  .rev-table { width:100%; border-collapse:collapse; font-size:12px; table-layout:fixed; }
+  .rev-table col.c-hinban { width:32%; }
+  .rev-table col.c-num    { width:14%; }
+  .rev-table col.c-suryou { width:18%; }
+  .rev-table col.c-del    { width:8%; }
+  .rev-table th { text-align:right; color:var(--sub); font-size:10px; padding:5px 2px; border-bottom:1px solid var(--line); }
   .rev-table th:first-child, .rev-table td:first-child { text-align:left; }
-  .rev-table td { padding:9px 4px; border-bottom:1px solid var(--line); text-align:right; vertical-align:middle; }
+  .rev-table td { padding:7px 2px; border-bottom:1px solid var(--line); text-align:right; vertical-align:middle; overflow:hidden; }
   .rev-table td:first-child { font-weight:700; word-break:break-all; }
-  .rev-table td.suryou { font-weight:900; color:var(--ok); font-size:15px; }
-  .rev-del { display:inline-block; width:26px; height:26px; line-height:24px; text-align:center;
-             border:1px solid var(--bad); color:var(--bad); border-radius:50%; cursor:pointer; font-weight:800; }
+  .rev-table td.suryou { font-weight:900; color:var(--ok); font-size:14px; }
+  .miniinput.rev-num { min-width:0; width:100%; padding:5px 2px; font-size:13px; }
+  .rev-del { display:inline-block; width:22px; height:22px; line-height:20px; text-align:center;
+             border:1px solid var(--bad); color:var(--bad); border-radius:50%; cursor:pointer; font-weight:800; font-size:13px; }
   .rev-del:active { background:var(--bad); color:#fff; }
 
   .nyuka-display {
@@ -236,6 +243,9 @@
   <div class="sub" id="revInfo">—</div>
   <div class="rev-wrap">
     <table class="rev-table">
+      <colgroup>
+        <col class="c-hinban"><col class="c-num"><col class="c-num"><col class="c-num"><col class="c-suryou"><col class="c-del">
+      </colgroup>
       <thead><tr><th>品番</th><th>箱数</th><th>端数</th><th>破壊</th><th>数量</th><th></th></tr></thead>
       <tbody id="revBody"></tbody>
     </table>
@@ -318,7 +328,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.11';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
+const APP_VERSION = 'v1.12';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzALEt3uPha_JbW7USYz8Q3TJnbg9gJauFe9yTEC3KqPrIqChkBLb-Tj0kt5WjqlMor/exec';
 
 const MAKERS_FALLBACK = ['大澤熔接工業所','清国溶接','小山製作所','山田鉄工所','丸磯工業所','花木製作所','羽谷工業所','伊藤プレス','メタルクリーン','マルマツ','ウエルギコウ','松原工業所','安井鉄工所','真鍋工業','向井工作所','大動工業','アクトメタル','日本グラス','エバー','トライ','村田工業所','檜山技研工業所','加藤技研工業所','トヨアケメッキ','福洋精工'];
@@ -623,8 +633,23 @@ async function startCamera(){
   schedule();
 }
 function resumeCamera(){
-  renderTally();   // 確認画面での削除・端数編集をスキャン画面のタリーに反映
+  renderTally();               // 確認画面での削除・端数編集をスキャン画面のタリーに反映
+  refreshResultForLastHinban(); // 上の結果表示（累積）も、編集後の最新値に更新
   if (stream && !running){ running=true; schedule(); } else if (!stream){ startCamera(); }
+}
+// スキャン画面の結果表示は「読み取った瞬間」の値のまま固定なので、
+// 確認画面で端数・破壊を後から編集して戻ってきた時は、最後にスキャンした品番ぶんを再計算して出し直す。
+let lastScannedHinban = null;
+function refreshResultForLastHinban(){
+  if (!lastScannedHinban || !pending || !pending.scans) return;
+  const arr = pending.scans.filter(s => s.hinban === lastScannedHinban);
+  if (!arr.length){ showResult('idle', '📷 かざしてください'); return; }
+  const ex = pending.extra[lastScannedHinban] || {};
+  const hasuuNow = ex.hasuu ? (parseInt(ex.hasuu, 10) || 0) : 0;
+  const hakoNow = hasuuNow > 0 ? (arr.length - 1) : arr.length;
+  const youbun = arr[0].youbun || 0;
+  const suryouNow = hakoNow * youbun + hasuuNow;
+  showResult('ok', '✅ 品番「' + esc(lastScannedHinban) + '」<br>この品番の累積 ' + arr.length + '枚（' + hakoNow + '箱 / 約' + suryouNow + '個）<br><span class="sub">全体合計 ' + pending.scans.length + '枚</span>');
 }
 function stopCamera(){
   running=false;
@@ -744,13 +769,9 @@ function onDecode(raw){
   lset(K_PENDING, pending);
   flash('ok', 'OK');
 
-  // この品番の現時点の累積（端数はまだ未確定なら0扱いの暫定値。端数・破壊ボタンで入れると次回から反映される）
-  const cnt = pending.scans.filter(s => s.hinban === hinban).length;
-  const ex0 = pending.extra[hinban] || {};
-  const hasuuNow = ex0.hasuu ? (parseInt(ex0.hasuu, 10) || 0) : 0;
-  const hakoNow  = hasuuNow > 0 ? (cnt - 1) : cnt;
-  const suryouNow = hakoNow * youbun + hasuuNow;
-  showResult('ok', '✅ 品番「' + esc(hinban || '(空)') + '」<br>この品番の累積 ' + cnt + '枚（' + hakoNow + '箱 / 約' + suryouNow + '個）<br><span class="sub">全体合計 ' + pending.scans.length + '枚</span>');
+  // この品番の現時点の累積を表示（端数はまだ未確定なら0扱いの暫定値。端数・破壊を入れると反映される）
+  lastScannedHinban = hinban;
+  refreshResultForLastHinban();
 
   if (document.getElementById('beepOn').checked) beep(1250, .12);
   if (document.getElementById('vibOn').checked && navigator.vibrate) navigator.vibrate(55);
@@ -776,6 +797,7 @@ function undoLast(){
     if (!stillHas) delete pending.extra[last.hinban];
     lset(K_PENDING, pending);
     renderTally();
+    refreshResultForLastHinban();
   });
 }
 function updateUndoBtn(){
@@ -962,8 +984,8 @@ function renderReview(){
     return '<tr>'
       + '<td>' + esc(h) + '</td>'
       + '<td>' + it.hako + '</td>'
-      + '<td><span class="miniinput numtap' + (it.hasuu===''?' empty':'') + '" data-h="' + hAttr + '" data-key="hasuu">' + (it.hasuu!==''?it.hasuu:'—') + '</span></td>'
-      + '<td><span class="miniinput numtap' + (it.hakai===''?' empty':'') + '" data-h="' + hAttr + '" data-key="hakai">' + (it.hakai!==''?it.hakai:'—') + '</span></td>'
+      + '<td><span class="miniinput rev-num numtap' + (it.hasuu===''?' empty':'') + '" data-h="' + hAttr + '" data-key="hasuu">' + (it.hasuu!==''?it.hasuu:'—') + '</span></td>'
+      + '<td><span class="miniinput rev-num numtap' + (it.hakai===''?' empty':'') + '" data-h="' + hAttr + '" data-key="hakai">' + (it.hakai!==''?it.hakai:'—') + '</span></td>'
       + '<td class="suryou">' + it.suryou + '</td>'
       + '<td><span class="rev-del" data-h="' + hAttr + '" title="この品番を削除">✕</span></td>'
       + '</tr>';

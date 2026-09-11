@@ -73,6 +73,16 @@
   .miniinput:active { background:rgba(255,255,255,.06); }
   .miniinput.empty { color:var(--sub); font-weight:400; }
 
+  /* 確認画面：品番ごとのカード。横スクロール無しで「数量」まで必ず見える */
+  .rev-card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:10px; }
+  .rev-hinban { font-size:17px; font-weight:800; margin-bottom:8px; word-break:break-all; }
+  .rev-row { display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid var(--line); font-size:13px; color:var(--sub); }
+  .rev-row:last-of-type { border-bottom:none; }
+  .rev-row .v { font-size:15px; font-weight:800; color:var(--txt); }
+  .rev-total { display:flex; justify-content:space-between; align-items:center; background:var(--bg); border-radius:10px; padding:10px 12px; margin-top:8px; }
+  .rev-total .k { font-size:13px; color:var(--sub); font-weight:700; }
+  .rev-total .v { font-size:28px; font-weight:900; color:var(--ok); }
+
   .nyuka-display {
     display:flex; justify-content:space-between; align-items:center;
     background:var(--bg); border:2px solid var(--accent); border-radius:10px;
@@ -120,6 +130,13 @@
             border-radius:12px; padding:12px; margin-bottom:10px; font-size:14px; font-weight:700; }
 
   #verFixed { position:fixed; bottom:4px; right:8px; font-size:10px; color:var(--sub); opacity:.55; z-index:9999; pointer-events:none; }
+
+  .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:300; display:none; align-items:center; justify-content:center; padding:22px; }
+  .modal-overlay.on { display:flex; }
+  .modal-box { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:22px 20px; width:100%; max-width:340px; }
+  .modal-msg { font-size:15px; font-weight:700; line-height:1.7; white-space:pre-wrap; margin-bottom:18px; text-align:center; }
+  .modal-btns { display:flex; gap:10px; }
+  .modal-btns button { flex:1; }
 </style>
 </head>
 <body>
@@ -193,7 +210,6 @@
     <label><input type="checkbox" id="bypass"> マスタ照合OFF（緊急時）</label>
     <label><input type="checkbox" id="beepOn" checked> 音</label>
     <label><input type="checkbox" id="vibOn" checked> バイブ</label>
-    <label><input type="checkbox" id="nativeDec"> ネイティブ解析</label>
   </div>
 
   <div class="card" style="padding:10px;">
@@ -216,15 +232,8 @@
 <div class="screen" id="s-review">
   <h1>確認</h1>
   <div class="sub" id="revInfo">—</div>
-  <div class="card">
-    <div style="overflow-x:auto;">
-    <table style="min-width:560px;">
-      <thead><tr><th>品番</th><th style="text-align:right">枚数</th><th style="text-align:right">収容数</th><th style="text-align:center">端数</th><th style="text-align:center">破壊</th><th style="text-align:right">箱数</th><th style="text-align:right">数量</th></tr></thead>
-      <tbody id="revBody"></tbody>
-    </table>
-    </div>
-    <div class="note">「箱数」＝ 端数を入れた品番は 枚数−1、それ以外は 枚数。「数量」＝ 箱数×収容数＋端数（収容数はQRから自動取得・要確認）。</div>
-  </div>
+  <div id="revBody"></div>
+  <div class="note" style="margin-bottom:10px;">「箱数」＝ 端数を入れた品番は 枚数−1、それ以外は 枚数。「数量」＝ 箱数×収容数＋端数（収容数はQRから自動取得・要確認）。</div>
   <button class="ok full" id="sendBtn" onclick="doSend()">送信（ネット必要）</button>
   <button class="ghost full" onclick="show('s-scan'); resumeCamera();">← 読取にもどる</button>
   <div id="err2" style="color:var(--bad);font-size:13px;margin-top:6px;white-space:pre-wrap;"></div>
@@ -291,10 +300,18 @@
   </div>
 </div>
 
+<!-- ========== 確認/通知ダイアログ（ネイティブconfirm/alertは使わない＝「〜の内容」表示を出さないため） ========== -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-box">
+    <div class="modal-msg" id="modalMsg"></div>
+    <div class="modal-btns" id="modalBtns"></div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.6';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
+const APP_VERSION = 'v1.7';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzALEt3uPha_JbW7USYz8Q3TJnbg9gJauFe9yTEC3KqPrIqChkBLb-Tj0kt5WjqlMor/exec';
 
 const MAKERS_FALLBACK = ['大澤熔接工業所','清国溶接','小山製作所','山田鉄工所','丸磯工業所','花木製作所','羽谷工業所','伊藤プレス','メタルクリーン','マルマツ','ウエルギコウ','松原工業所','安井鉄工所','真鍋工業','向井工作所','大動工業','アクトメタル','日本グラス','エバー','トライ','村田工業所','檜山技研工業所','加藤技研工業所','トヨアケメッキ','福洋精工'];
@@ -404,10 +421,11 @@ function resumePending(){
   show('s-review');
 }
 function discardPending(){
-  if (!confirm('未送信データを破棄します。よろしいですか？')) return;
-  ldel(K_PENDING); pending = null; qrSeen = new Set();
-  const rb = document.getElementById('resumeBox'); if (rb) rb.style.display = 'none';
-  const db = document.getElementById('datePendingBanner'); if (db) db.style.display = 'none';
+  showConfirm('未送信データを破棄します。よろしいですか？', function(){
+    ldel(K_PENDING); pending = null; qrSeen = new Set();
+    const rb = document.getElementById('resumeBox'); if (rb) rb.style.display = 'none';
+    const db = document.getElementById('datePendingBanner'); if (db) db.style.display = 'none';
+  });
 }
 
 /* ================= ログイン ================= */
@@ -461,8 +479,7 @@ function logout(){
 }
 // スキャン画面のメーカーバッジから：ログイン画面に戻る（＝メーカー切替の入口）。読取中データは保持される。
 function confirmSwitchMaker(){
-  if (!confirm('ログイン画面に戻ります（メーカーを切り替えられます）。\n読取中のデータは保持されます。よろしいですか？')) return;
-  logout();
+  showConfirm('ログイン画面に戻ります（メーカーを切り替えられます）。\n読取中のデータは保持されます。よろしいですか？', logout);
 }
 
 /* ================= 納入日 ================= */
@@ -535,19 +552,23 @@ function enterDateScreen(){
 
 /* ================= スキャン開始 ================= */
 function startScanning(){
-  if (!chosenDate){ alert('納入日を選択してください'); return; }
+  if (!chosenDate){ showAlert('納入日を選択してください'); return; }
   const hasPending = pending && pending.scans && pending.scans.length;
 
   // 別メーカーの未送信データがある間は、新しい読取を始めさせない（混在・誤送信防止）。
   // 送信するには一度そのメーカーでログインし直す必要がある（納入日画面の案内から）。
   if (hasPending && pending.maker !== auth.maker){
-    alert('別メーカー「' + pending.maker + '」の未送信データ（' + pending.shukkaDate + ' / ' + pending.scans.length + '枚）が残っています。\nそちらを送信するか破棄してから、読取を始めてください。\n（この画面上部の案内から操作できます）');
+    showAlert('別メーカー「' + pending.maker + '」の未送信データ（' + pending.shukkaDate + ' / ' + pending.scans.length + '枚）が残っています。\nそちらを送信するか破棄してから、読取を始めてください。\n（この画面上部の案内から操作できます）');
     return;
   }
   // 同じメーカーで別の納入日の未送信が残っていたら警告
   if (hasPending && pending.shukkaDate !== chosenDate){
-    if (!confirm('未送信データ（' + pending.shukkaDate + ' / ' + pending.scans.length + '枚）があります。\n先に送信することを推奨します。\nこのまま新しい読取を始めますか？（未送信は保持されます）')) return;
+    showConfirm('未送信データ（' + pending.shukkaDate + ' / ' + pending.scans.length + '枚）があります。\n先に送信することを推奨します。\nこのまま新しい読取を始めますか？（未送信は保持されます）', reallyStartScanning);
+    return;
   }
+  reallyStartScanning();
+}
+function reallyStartScanning(){
   if (!pending || pending.maker !== auth.maker || pending.shukkaDate !== chosenDate){
     pending = { maker: auth.maker, shukkaDate: chosenDate, scans: [], extra: {} };
     lset(K_PENDING, pending);
@@ -566,7 +587,7 @@ function continueScan(){ ldel(K_PENDING); pending = null; enterDateScreen(); }
 /* ================= カメラ / デコード ================= */
 let stream=null, track=null, video=document.getElementById('v');
 let cv=document.createElement('canvas'), cx=cv.getContext('2d',{willReadFrequently:true});
-let nativeDet=null, nativeOK=false, running=false, paused=false, torchOn=false;
+let running=false, paused=false, torchOn=false;
 let armed=true, emptyStreak=0, acceptedRaw='', lastAcceptTs=0, lastLoopTs=0;
 let dbgFrame='—', dbgLast='—', dbgErr='—';
 
@@ -578,7 +599,7 @@ async function startCamera(){
       video: { facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720} }, audio:false
     });
   } catch(e){
-    alert('カメラ起動失敗: ' + e.name + ' / ' + e.message); return;
+    showAlert('カメラ起動失敗: ' + e.name + ' / ' + e.message); return;
   }
   video.srcObject = stream; await video.play();
   track = stream.getVideoTracks()[0];
@@ -586,13 +607,6 @@ async function startCamera(){
   let caps={}; try { caps = track.getCapabilities ? track.getCapabilities() : {}; } catch(e){}
   document.getElementById('btnTorch').disabled = !caps.torch;
 
-  nativeDet=null; nativeOK=false;
-  if ('BarcodeDetector' in window){
-    try {
-      const f = await BarcodeDetector.getSupportedFormats();
-      if (f.includes('qr_code')){ nativeDet = new BarcodeDetector({formats:['qr_code']}); nativeOK=true; }
-    } catch(e){}
-  }
   armed=true; emptyStreak=0; acceptedRaw=''; paused=false;
   document.getElementById('btnPause').textContent = '⏸ 一時停止';
   running=true; lastLoopTs=0;
@@ -628,14 +642,9 @@ async function loop(){
   if (cv.width !== vw){ cv.width=vw; cv.height=vh; }
   cx.drawImage(video, 0, 0, vw, vh);
 
-  const useNative = document.getElementById('nativeDec').checked && nativeOK && nativeDet;
   let raw=null;
   try {
-    if (useNative){
-      const codes = await nativeDet.detect(cv);
-      if (codes && codes.length) raw = codes[0].rawValue;
-      dbgErr='—';
-    } else if (typeof jsQR === 'function'){
+    if (typeof jsQR === 'function'){
       const img = cx.getImageData(0,0,vw,vh);
       const c = jsQR(img.data, vw, vh, { inversionAttempts:'dontInvert' });
       if (c && c.data) raw = c.data;
@@ -649,8 +658,7 @@ async function loop(){
     if (!armed && emptyStreak >= CLEAR_FRAMES){ armed = true; showResult('idle', '📷 かざしてください'); }
   }
 
-  document.getElementById('dbg').textContent =
-    (useNative?'BarcodeDetector':'jsQR') + ' / ' + dbgFrame + ' / QR長 ' + dbgLast + ' / ' + dbgErr;
+  document.getElementById('dbg').textContent = 'jsQR / ' + dbgFrame + ' / QR長 ' + dbgLast + ' / ' + dbgErr;
   schedule();
 }
 // カメラ直下の結果表示：かざす前後の状態ではなく「直前の読取が成功/失敗したか＋理由」を表示する。
@@ -658,7 +666,7 @@ async function loop(){
 function showResult(kind, msg){
   const el = document.getElementById('resultBox');
   el.className = 'resultbox ' + kind;
-  el.textContent = msg;
+  el.innerHTML = msg;   // 呼び出し側で <br> による改行を使うため innerHTML（埋め込む値は esc() 済みのこと）
 }
 
 /* ================= 読取判定（フェーズ順に判定） ================= */
@@ -722,14 +730,22 @@ function onDecode(raw){
   qrSeen.add(raw);
   lset(K_PENDING, pending);
   flash('ok', 'OK');
-  showResult('ok', '✅ 読み取りOK　品番「' + (hinban || '(空)') + '」　今回の合計 ' + pending.scans.length + '枚');
+
+  // この品番の現時点の累積（端数はまだ未確定なら0扱いの暫定値。端数・破壊ボタンで入れると次回から反映される）
+  const cnt = pending.scans.filter(s => s.hinban === hinban).length;
+  const ex0 = pending.extra[hinban] || {};
+  const hasuuNow = ex0.hasuu ? (parseInt(ex0.hasuu, 10) || 0) : 0;
+  const hakoNow  = hasuuNow > 0 ? (cnt - 1) : cnt;
+  const suryouNow = hakoNow * youbun + hasuuNow;
+  showResult('ok', '✅ 品番「' + esc(hinban || '(空)') + '」<br>この品番の累積 ' + cnt + '枚（' + hakoNow + '箱 / 約' + suryouNow + '個）<br><span class="sub">全体合計 ' + pending.scans.length + '枚</span>');
+
   if (document.getElementById('beepOn').checked) beep(1250, .12);
   if (document.getElementById('vibOn').checked && navigator.vibrate) navigator.vibrate(55);
   renderTally();
 }
 function reject(kind, msg){
   flash('bad', REJ_LABEL[kind] || '×');
-  showResult('bad', '❌ ' + msg);
+  showResult('bad', '❌ ' + esc(msg));
   if (document.getElementById('beepOn').checked) beep(320, .18);
   if (document.getElementById('vibOn').checked && navigator.vibrate) navigator.vibrate([40,40,40]);
   const box = document.getElementById('rejBox');
@@ -740,13 +756,14 @@ function reject(kind, msg){
 function undoLast(){
   if (!pending || !pending.scans.length) return;
   const last = pending.scans[pending.scans.length - 1];
-  if (!confirm('直前の読取を取り消します。\n品番: ' + last.hinban + '\nよろしいですか？')) return;
-  pending.scans.pop();
-  qrSeen.delete(last.qr);
-  const stillHas = pending.scans.some(s => s.hinban === last.hinban);
-  if (!stillHas) delete pending.extra[last.hinban];
-  lset(K_PENDING, pending);
-  renderTally();
+  showConfirm('直前の読取を取り消します。\n品番: ' + last.hinban + '\nよろしいですか？', function(){
+    pending.scans.pop();
+    qrSeen.delete(last.qr);
+    const stillHas = pending.scans.some(s => s.hinban === last.hinban);
+    if (!stillHas) delete pending.extra[last.hinban];
+    lset(K_PENDING, pending);
+    renderTally();
+  });
 }
 function updateUndoBtn(){
   const btn = document.getElementById('btnUndo');
@@ -867,9 +884,36 @@ function numpadCancel(){
   numpadCallback = null;
 }
 
+/* ================= 確認/通知ダイアログ（自前モーダル） =================
+   window.confirm()/alert() は使わない。Android Chrome では
+   「<サイト名> の内容」という見出しが必ず付いて出てしまうため。 */
+function showModal(msg, buttons){
+  document.getElementById('modalMsg').textContent = msg;
+  const area = document.getElementById('modalBtns');
+  area.innerHTML = '';
+  buttons.forEach(function (b) {
+    const el = document.createElement('button');
+    el.className = b.cls || 'ghost';
+    el.textContent = b.label;
+    el.onclick = function () { closeModal(); if (b.action) b.action(); };
+    area.appendChild(el);
+  });
+  document.getElementById('modalOverlay').classList.add('on');
+}
+function closeModal(){ document.getElementById('modalOverlay').classList.remove('on'); }
+function showAlert(msg, okCb){
+  showModal(msg, [{ label:'OK', cls:'primary', action: okCb }]);
+}
+function showConfirm(msg, yesCb, noCb){
+  showModal(msg, [
+    { label:'キャンセル', cls:'ghost', action: noCb },
+    { label:'OK', cls:'primary', action: yesCb }
+  ]);
+}
+
 /* ================= 確認 ================= */
 function goReview(){
-  if (!pending.scans.length){ alert('まだ1枚も読み取っていません'); return; }
+  if (!pending.scans.length){ showAlert('まだ1枚も読み取っていません'); return; }
   running = false;   // カメラ止めずに一時停止（戻れる）
   renderReview();
   show('s-review');
@@ -890,22 +934,22 @@ function reviewItems(){
     return { hinban: h, mai: mai, hako: hako, youbun: youbun, suryou: suryou, hasuu: ex.hasuu || '', hakai: ex.hakai || '' };
   });
 }
-// 端数・破壊のセルはタップで共通テンキーを開く（data属性で受け渡し、エスケープ絡みの事故を避ける）
+// 品番ごとにカード表示（横スクロール不要）。端数・破壊はタップで共通テンキーを開く。
+// data属性で受け渡すことで、品番に含まれる記号によるエスケープ絡みの事故を避ける。
 function renderReview(){
   document.getElementById('revInfo').textContent = pending.maker + '　納入日 ' + pending.shukkaDate + '　合計 ' + pending.scans.length + '枚';
   const tb = document.getElementById('revBody');
   tb.innerHTML = reviewItems().map(function (it) {
     const h = it.hinban;
     const hAttr = esc(h);
-    return '<tr>'
-      + '<td>' + esc(h) + '</td>'
-      + '<td class="num">' + it.mai + '</td>'
-      + '<td class="num">' + it.youbun + '</td>'
-      + '<td style="text-align:center"><span class="miniinput numtap' + (it.hasuu===''?' empty':'') + '" data-h="' + hAttr + '" data-key="hasuu">' + (it.hasuu!==''?it.hasuu:'—') + '</span></td>'
-      + '<td style="text-align:center"><span class="miniinput numtap' + (it.hakai===''?' empty':'') + '" data-h="' + hAttr + '" data-key="hakai">' + (it.hakai!==''?it.hakai:'—') + '</span></td>'
-      + '<td class="num">' + it.hako + '</td>'
-      + '<td class="num">' + it.suryou + '</td>'
-      + '</tr>';
+    return '<div class="rev-card">'
+      + '<div class="rev-hinban">' + esc(h) + '</div>'
+      + '<div class="rev-row"><span>枚数</span><span class="v">' + it.mai + '枚</span></div>'
+      + '<div class="rev-row"><span>収容数（QRから自動）</span><span class="v">' + it.youbun + '</span></div>'
+      + '<div class="rev-row"><span>端数（半端箱の入数）</span><span class="miniinput numtap' + (it.hasuu===''?' empty':'') + '" data-h="' + hAttr + '" data-key="hasuu">' + (it.hasuu!==''?it.hasuu:'—') + '</span></div>'
+      + '<div class="rev-row"><span>破壊数</span><span class="miniinput numtap' + (it.hakai===''?' empty':'') + '" data-h="' + hAttr + '" data-key="hakai">' + (it.hakai!==''?it.hakai:'—') + '</span></div>'
+      + '<div class="rev-total"><span class="k">箱数 ' + it.hako + '　数量</span><span class="v">' + it.suryou + '</span></div>'
+      + '</div>';
   }).join('');
   tb.querySelectorAll('.numtap').forEach(function (el) {
     el.addEventListener('click', function () {
@@ -1074,9 +1118,7 @@ window.addEventListener('popstate', function () {
   const onLogin = document.getElementById('s-login').classList.contains('on');
   if (onLogin) return;   // ログイン画面まで戻ってきているなら、そこは普通の画面として扱う
   if (hasUnsent) {
-    if (confirm('未送信のデータ（' + pending.scans.length + '枚）があります。\nログイン画面に戻りますか？\n（データは保持されます）')) {
-      logout();
-    }
+    showConfirm('未送信のデータ（' + pending.scans.length + '枚）があります。\nログイン画面に戻りますか？\n（データは保持されます）', logout);
   }
 });
 pushDummyHistory();

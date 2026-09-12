@@ -119,6 +119,12 @@
   .toggles label { display:flex; align-items:center; gap:6px; }
   .toggles input { width:20px; height:20px; accent-color:var(--accent); }
 
+  .hist-row { padding:13px 4px; border-bottom:1px solid var(--line); cursor:pointer; }
+  .hist-row:last-child { border-bottom:none; }
+  .hist-row:active { background:rgba(0,0,0,.04); }
+  .hist-row-main { font-size:15px; font-weight:800; }
+  .hist-row-sub { font-size:12px; color:var(--sub); margin-top:2px; }
+
   .datelist { max-height:46vh; overflow-y:auto; border:1px solid var(--line); border-radius:10px; }
   .dateitem { padding:15px 14px; border-bottom:1px solid var(--line); font-size:17px; font-weight:700; cursor:pointer; }
   .dateitem:last-child { border-bottom:none; }
@@ -226,7 +232,7 @@
   <h1>読取履歴</h1>
   <div class="sub" id="histInfo">—</div>
   <div class="card" id="histList"></div>
-  <button class="ghost full" onclick="closeHistory()">← もどる</button>
+  <button class="ghost full" id="histBackBtn" onclick="closeHistory()">← もどる</button>
 </div>
 
 <!-- ========== 確認 ========== -->
@@ -320,7 +326,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.14';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
+const APP_VERSION = 'v1.15';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzALEt3uPha_JbW7USYz8Q3TJnbg9gJauFe9yTEC3KqPrIqChkBLb-Tj0kt5WjqlMor/exec';
 
 const MAKERS_FALLBACK = ['大澤熔接工業所','清国溶接','小山製作所','山田鉄工所','丸磯工業所','花木製作所','羽谷工業所','伊藤プレス','メタルクリーン','マルマツ','ウエルギコウ','松原工業所','安井鉄工所','真鍋工業','向井工作所','大動工業','アクトメタル','日本グラス','エバー','トライ','村田工業所','檜山技研工業所','加藤技研工業所','トヨアケメッキ','福洋精工'];
@@ -766,14 +772,14 @@ function onDecode(raw){
   refreshResultForLastHinban();
 
   if (document.getElementById('beepOn').checked) beep(1250, .12);
-  if (document.getElementById('vibOn').checked && navigator.vibrate) navigator.vibrate(55);
+  if (document.getElementById('vibOn').checked && navigator.vibrate) navigator.vibrate(120);
   renderTally();
 }
 function reject(kind, msg){
   flash('bad', REJ_LABEL[kind] || '×');
   showResult('bad', '❌ ' + esc(msg));
   if (document.getElementById('beepOn').checked) beep(320, .18);
-  if (document.getElementById('vibOn').checked && navigator.vibrate) navigator.vibrate([40,40,40]);
+  if (document.getElementById('vibOn').checked && navigator.vibrate) navigator.vibrate([90,70,90,70,90]);
   const box = document.getElementById('rejBox');
   box.textContent = '弾いた累計：重複 ' + rejCounts.dup + ' / マスタ外 ' + rejCounts.master + ' / 他社 ' + rejCounts.tori + ' / 形式 ' + rejCounts.format;
 }
@@ -1057,7 +1063,7 @@ function doSend(){
       if (!res.ok){ err.textContent = 'エラー: ' + (res.message || '不明'); return; }
       const hist = lget(K_HIST, []);
       hist.unshift({ sentAt: new Date().toISOString(), maker: payload.maker, shukkaDate: pending.shukkaDate, rows: res.added, items: itemsSnapshot });
-      lset(K_HIST, hist.slice(0, 50));
+      lset(K_HIST, hist.slice(0, 200));  // 一覧はタップ式で軽いので、少し多めに保持
       ldel(K_PENDING); pending = null; qrSeen = new Set();
       document.getElementById('doneTitle').textContent = '送信完了';
       document.getElementById('doneBody').innerHTML =
@@ -1072,29 +1078,50 @@ function doSend(){
 }
 
 /* ================= 読取履歴（送信済み） ================= */
+// 一覧（納入日／送信日時）→ タップで詳細（品番別の箱数・数量）に切り替える2階層構成。
 let pausedBeforeHistory = false;
+let historyData = [];
 function openHistory(){
   pausedBeforeHistory = paused;
   paused = true;
-  const hist = lget(K_HIST, []).filter(h => !auth || h.maker === auth.maker);
-  document.getElementById('histInfo').textContent = (auth ? auth.maker : '') + '　送信済み ' + hist.length + '件（新しい順）';
+  renderHistoryList();
+  show('s-history');
+}
+function renderHistoryList(){
+  historyData = lget(K_HIST, []).filter(h => !auth || h.maker === auth.maker);
+  document.getElementById('histInfo').textContent = (auth ? auth.maker : '') + '　送信済み ' + historyData.length + '件（新しい順）';
   const box = document.getElementById('histList');
-  if (!hist.length){
+  if (!historyData.length){
     box.innerHTML = '<div class="note">送信履歴がありません</div>';
   } else {
-    box.innerHTML = hist.map(function (h) {
+    box.innerHTML = historyData.map(function (h, i) {
       const dtStr = new Date(h.sentAt).toLocaleString('ja-JP');
-      const rows = (h.items || []).map(function (it) {
-        return '<tr><td>' + esc(it.hinban) + '</td><td class="num">' + it.hako + '</td><td class="num">' + it.suryou + '</td></tr>';
-      }).join('');
-      return '<div style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--line);">'
-        + '<div style="font-weight:800;">📅 納入日 ' + esc(h.shukkaDate) + '</div>'
-        + '<div class="sub" style="margin-bottom:6px;">送信 ' + dtStr + '　' + (h.rows||0) + '行</div>'
-        + '<table><thead><tr><th>品番</th><th style="text-align:right">箱数</th><th style="text-align:right">数量</th></tr></thead><tbody>' + rows + '</tbody></table>'
+      return '<div class="hist-row" data-i="' + i + '">'
+        + '<div class="hist-row-main">📅 納入日 ' + esc(h.shukkaDate) + '</div>'
+        + '<div class="hist-row-sub">送信 ' + dtStr + '　' + (h.rows||0) + '行</div>'
         + '</div>';
     }).join('');
+    box.querySelectorAll('.hist-row').forEach(function (el) {
+      el.addEventListener('click', function () { showHistoryDetail(parseInt(el.dataset.i, 10)); });
+    });
   }
-  show('s-history');
+  const btn = document.getElementById('histBackBtn');
+  btn.textContent = '← もどる';
+  btn.onclick = closeHistory;
+}
+function showHistoryDetail(i){
+  const h = historyData[i];
+  if (!h) return;
+  const dtStr = new Date(h.sentAt).toLocaleString('ja-JP');
+  document.getElementById('histInfo').textContent = '納入日 ' + h.shukkaDate + '　送信 ' + dtStr;
+  const rows = (h.items || []).map(function (it) {
+    return '<tr><td>' + esc(it.hinban) + '</td><td class="num">' + it.hako + '</td><td class="num">' + it.suryou + '</td></tr>';
+  }).join('');
+  document.getElementById('histList').innerHTML =
+    '<table><thead><tr><th>品番</th><th style="text-align:right">箱数</th><th style="text-align:right">数量</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  const btn = document.getElementById('histBackBtn');
+  btn.textContent = '← 一覧にもどる';
+  btn.onclick = renderHistoryList;
 }
 function closeHistory(){
   paused = pausedBeforeHistory;
@@ -1124,7 +1151,7 @@ function beep(freq, dur){
     const o = actx.createOscillator(), g = actx.createGain();
     o.connect(g); g.connect(actx.destination);
     o.type = 'square'; o.frequency.value = freq;
-    g.gain.setValueAtTime(.25, actx.currentTime);
+    g.gain.setValueAtTime(.85, actx.currentTime);
     g.gain.exponentialRampToValueAtTime(.001, actx.currentTime + dur);
     o.start(); o.stop(actx.currentTime + dur);
   } catch(e){}

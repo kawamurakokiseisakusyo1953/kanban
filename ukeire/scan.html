@@ -74,19 +74,19 @@
      6列（品番/箱数/端数/破壊/数量/×）を画面幅に収める＝横スクロール不要にするため、
      min-widthは指定せず、余白・文字サイズを詰めて table-layout:fixed で列幅を固定する。 */
   .rev-wrap { overflow-x:auto; }
-  .rev-table { width:100%; border-collapse:collapse; font-size:12px; table-layout:fixed; }
-  .rev-table col.c-hinban { width:32%; }
-  .rev-table col.c-num    { width:14%; }
-  .rev-table col.c-suryou { width:18%; }
+  .rev-table { width:100%; border-collapse:collapse; font-size:14px; table-layout:fixed; }
+  .rev-table col.c-hinban { width:30%; }
+  .rev-table col.c-num    { width:15%; }
+  .rev-table col.c-suryou { width:17%; }
   .rev-table col.c-del    { width:8%; }
-  .rev-table th { text-align:right; color:var(--sub); font-size:10px; padding:5px 2px; border-bottom:1px solid var(--line); }
+  .rev-table th { text-align:right; color:var(--sub); font-size:11px; padding:6px 2px; border-bottom:1px solid var(--line); }
   .rev-table th:first-child, .rev-table td:first-child { text-align:left; }
-  .rev-table td { padding:7px 2px; border-bottom:1px solid var(--line); text-align:right; vertical-align:middle; overflow:hidden; }
+  .rev-table td { padding:9px 2px; border-bottom:1px solid var(--line); text-align:right; vertical-align:middle; overflow:hidden; }
   .rev-table td:first-child { font-weight:700; word-break:break-all; }
-  .rev-table td.suryou { font-weight:900; color:var(--ok); font-size:14px; }
-  .miniinput.rev-num { min-width:0; width:100%; padding:5px 2px; font-size:13px; }
-  .rev-del { display:inline-block; width:22px; height:22px; line-height:20px; text-align:center;
-             border:1px solid var(--bad); color:var(--bad); border-radius:50%; cursor:pointer; font-weight:800; font-size:13px; }
+  .rev-table td.suryou { font-weight:900; color:var(--ok); font-size:16px; }
+  .miniinput.rev-num { min-width:0; width:100%; padding:6px 2px; font-size:15px; }
+  .rev-del { display:inline-block; width:24px; height:24px; line-height:22px; text-align:center;
+             border:1px solid var(--bad); color:var(--bad); border-radius:50%; cursor:pointer; font-weight:800; font-size:14px; }
   .rev-del:active { background:var(--bad); color:#fff; }
 
   .nyuka-display {
@@ -327,7 +327,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.23';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
+const APP_VERSION = 'v1.24';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzALEt3uPha_JbW7USYz8Q3TJnbg9gJauFe9yTEC3KqPrIqChkBLb-Tj0kt5WjqlMor/exec';
 
 const MAKERS_FALLBACK = ['大澤熔接工業所','清国溶接','小山製作所','山田鉄工所','丸磯工業所','花木製作所','羽谷工業所','伊藤プレス','メタルクリーン','マルマツ','ウエルギコウ','松原工業所','安井鉄工所','真鍋工業','向井工作所','大動工業','アクトメタル','日本グラス','エバー','トライ','村田工業所','檜山技研工業所','加藤技研工業所','トヨアケメッキ','福洋精工'];

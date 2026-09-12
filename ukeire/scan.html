@@ -201,7 +201,7 @@
   </div>
 
   <div class="resultbox idle" id="resultBox">📷 かざしてください</div>
-  <div id="totalCount" style="font-size:13px;color:var(--sub);margin:4px 0;">読取 0枚</div>
+  <div id="totalCount" style="font-size:22px;font-weight:700;color:var(--txt);text-align:center;margin:4px 0;">0枚</div>
 
   <div class="row">
     <button id="btnExtra" onclick="openExtra()" disabled>端数・破壊</button>
@@ -327,7 +327,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.21';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
+const APP_VERSION = 'v1.23';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzALEt3uPha_JbW7USYz8Q3TJnbg9gJauFe9yTEC3KqPrIqChkBLb-Tj0kt5WjqlMor/exec';
 
 const MAKERS_FALLBACK = ['大澤熔接工業所','清国溶接','小山製作所','山田鉄工所','丸磯工業所','花木製作所','羽谷工業所','伊藤プレス','メタルクリーン','マルマツ','ウエルギコウ','松原工業所','安井鉄工所','真鍋工業','向井工作所','大動工業','アクトメタル','日本グラス','エバー','トライ','村田工業所','檜山技研工業所','加藤技研工業所','トヨアケメッキ','福洋精工'];
@@ -664,7 +664,7 @@ function refreshResultForLastHinban(){
   const hakoNow = hasuuNow > 0 ? (arr.length - 1) : arr.length;
   const youbun = arr[0].youbun || 0;
   const suryouNow = hakoNow * youbun + hasuuNow;
-  showResult('ok', '✅ 品番「' + esc(lastScannedHinban) + '」<br>この品番の累積 ' + arr.length + '枚（' + hakoNow + '箱 / ' + suryouNow + '個）<br><span class="sub">全体合計 ' + pending.scans.length + '枚</span>');
+  showResult('ok', '✅ 品番「' + esc(lastScannedHinban) + '」<br>この品番の累積 ' + arr.length + '枚（' + hakoNow + '箱 / ' + suryouNow + '個）');
 }
 function stopCamera(){
   running=false;
@@ -841,7 +841,7 @@ function renderTally(){
       + '<td>' + esc(h) + (tag.length ? ' <span style="color:var(--warn);font-size:12px;">'+tag.join(' ')+'</span>' : '') + '</td>'
       + '<td class="num">' + m[h] + '</td></tr>';
   }).join('');
-  document.getElementById('totalCount').textContent = '読取 ' + (pending && pending.scans ? pending.scans.length : 0) + '枚';
+  document.getElementById('totalCount').textContent = (pending && pending.scans ? pending.scans.length : 0) + '枚';
   updateUndoBtn();
 }
 

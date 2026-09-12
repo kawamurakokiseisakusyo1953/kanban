@@ -250,7 +250,7 @@
   </div>
   <div class="note" style="margin-bottom:10px;">端数・破壊はタップで入力。「数量」＝ 箱数×収容数＋端数（収容数はQRから自動取得・要確認）。</div>
   <button class="ok full" id="sendBtn" onclick="doSend()">送信（ネット必要）</button>
-  <button class="ghost full" onclick="show('s-scan'); resumeCamera();">← 読取にもどる</button>
+  <button class="ghost full" onclick="updateScanHeader(); show('s-scan'); resumeCamera();">← 読取にもどる</button>
   <div id="err2" style="color:var(--bad);font-size:13px;margin-top:6px;white-space:pre-wrap;"></div>
 </div>
 
@@ -326,7 +326,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.16';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
+const APP_VERSION = 'v1.17';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzALEt3uPha_JbW7USYz8Q3TJnbg9gJauFe9yTEC3KqPrIqChkBLb-Tj0kt5WjqlMor/exec';
 
 const MAKERS_FALLBACK = ['大澤熔接工業所','清国溶接','小山製作所','山田鉄工所','丸磯工業所','花木製作所','羽谷工業所','伊藤プレス','メタルクリーン','マルマツ','ウエルギコウ','松原工業所','安井鉄工所','真鍋工業','向井工作所','大動工業','アクトメタル','日本グラス','エバー','トライ','村田工業所','檜山技研工業所','加藤技研工業所','トヨアケメッキ','福洋精工'];
@@ -521,7 +521,8 @@ function renderPendingBanner(){
   el.style.display = 'block';
   if (pending.maker === auth.maker){
     el.innerHTML = '📦 未送信 ' + pending.scans.length + '枚（納入日 ' + esc(pending.shukkaDate) + '）があります。'
-      + '<br><button class="primary full" onclick="resumePending()">確認・送信する</button>'
+      + '<br><button class="primary full" onclick="continuePending()">続きを読み取る</button>'
+      + '<button class="ghost full" onclick="resumePending()">確認・送信する</button>'
       + '<button class="ghost full" onclick="discardPending()">このデータを破棄する</button>';
   } else {
     el.innerHTML = '⚠️ 別メーカー「' + esc(pending.maker) + '」の未送信データ ' + pending.scans.length + '枚が残っています。'
@@ -590,15 +591,30 @@ function reallyStartScanning(){
     lset(K_PENDING, pending);
   }
   rebuildQrSeen();
-  document.getElementById('scMaker').textContent = auth.maker + ' ▾';
-  document.getElementById('scDate').textContent = chosenDate + ' ▾';
+  updateScanHeader();
   netBadge();
   renderTally();
   show('s-scan');
   startCamera();
 }
+// 上部バッジ（メーカー名／納入日）を、今のpending（無ければauth/chosenDate）に合わせて必ず更新する。
+// s-scan画面を出す経路が複数あるため、経路によっては「—」のままになるのを防ぐため一元化。
+function updateScanHeader(){
+  const maker = (pending && pending.maker) || (auth && auth.maker) || '—';
+  const date  = (pending && pending.shukkaDate) || chosenDate || '—';
+  document.getElementById('scMaker').textContent = maker + ' ▾';
+  document.getElementById('scDate').textContent = date + ' ▾';
+}
 function backToDate(){ stopCamera(); enterDateScreen(); }
 function continueScan(){ ldel(K_PENDING); pending = null; enterDateScreen(); }
+// 納入日画面のバナューから「続きを読み取る」：日付選択をやり直さず、そのままスキャン画面へ戻る。
+// （アプリを落として再度開いた場合、既定の納入日候補リストは「今日以降」しか出ないため、
+//   pending保存済みの納入日がリストに無いことがある＝その場合でもここなら確実に戻れる）
+function continuePending(){
+  if (!pending || !pending.scans || !pending.scans.length) return;
+  chosenDate = pending.shukkaDate;
+  reallyStartScanning();
+}
 
 /* ================= カメラ / デコード ================= */
 let stream=null, track=null, video=document.getElementById('v');
@@ -1011,7 +1027,7 @@ function deleteHinbanFromReview(h){
     delete pending.extra[h];
     lset(K_PENDING, pending);
     if (!pending.scans.length) {
-      showAlert('全て削除しました。読取画面にもどります。', function () { show('s-scan'); resumeCamera(); });
+      showAlert('全て削除しました。読取画面にもどります。', function () { updateScanHeader(); show('s-scan'); resumeCamera(); });
       return;
     }
     renderReview();
@@ -1126,6 +1142,7 @@ function showHistoryDetail(i){
 function closeHistory(){
   paused = pausedBeforeHistory;
   document.getElementById('btnPause').textContent = paused ? '▶ 再開' : '⏸ 一時停止';
+  updateScanHeader();
   show('s-scan');
 }
 

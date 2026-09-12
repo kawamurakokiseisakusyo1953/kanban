@@ -75,20 +75,26 @@
      min-widthは指定せず、余白・文字サイズを詰めて table-layout:fixed で列幅を固定する。 */
   .rev-wrap { overflow-x:auto; }
   .rev-table { width:100%; border-collapse:collapse; font-size:14px; table-layout:fixed; }
-  .rev-table col.c-hinban { width:27%; }
-  .rev-table col.c-num    { width:14%; }
-  .rev-table col.c-suryou { width:21%; }
-  .rev-table col.c-del    { width:8%; }
+  .rev-table col.c-hako   { width:30px; }
+  .rev-table col.c-suryou { width:50px; }
+  .rev-table col.c-del    { width:24px; }
+  /* 品番列だけは幅を指定しない＝残りの幅を全部もらう（table-layout:fixedの仕様）。
+     品番は最大23桁・折り返し無し・縮小無しを死守するため、箱数・数量・削除ボタンの列は
+     実測（bold数字の実寸）ぎりぎりの幅に抑えている。変更时は幅を削らないこと。 */
   .rev-table th { text-align:right; color:var(--sub); font-size:11px; padding:6px 2px; border-bottom:1px solid var(--line); }
   .rev-table th:first-child, .rev-table td:first-child { text-align:left; }
   .rev-table td { padding:9px 2px; border-bottom:1px solid var(--line); text-align:right; vertical-align:middle; overflow:hidden; }
-  .rev-table td:first-child { font-weight:700; word-break:break-all; }
-  .rev-table td.hako { font-weight:900; color:var(--accent); font-size:18px; }
-  .rev-table td.suryou { font-weight:900; color:var(--ok); font-size:18px; }
-  .miniinput.rev-num { min-width:0; width:100%; padding:6px 2px; font-size:13px; font-weight:600; color:var(--sub); border-color:transparent; background:rgba(0,0,0,.03); }
-  .miniinput.rev-num.empty { background:none; }
-  .rev-del { display:inline-block; width:24px; height:24px; line-height:22px; text-align:center;
-             border:1px solid var(--bad); color:var(--bad); border-radius:50%; cursor:pointer; font-weight:800; font-size:14px; }
+  .rev-table td:first-child { font-weight:700; }
+  .rev-table .hinban-name { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rev-table td.hako { font-weight:900; color:var(--accent); font-size:14px; }
+  .rev-table td.suryou { font-weight:900; color:var(--ok); font-size:15px; }
+  .rev-tags { margin-top:3px; white-space:nowrap; }
+  .rev-tag { display:inline-block; font-size:11px; font-weight:600; color:var(--sub); background:rgba(0,0,0,.04);
+             border-radius:8px; padding:2px 6px; margin-right:4px; cursor:pointer; }
+  .rev-tag.empty { color:var(--sub); opacity:.55; }
+  .rev-tag:active { background:rgba(0,0,0,.08); }
+  .rev-del { display:inline-block; width:20px; height:20px; line-height:18px; text-align:center;
+             border:1px solid var(--bad); color:var(--bad); border-radius:50%; cursor:pointer; font-weight:800; font-size:12px; }
   .rev-del:active { background:var(--bad); color:#fff; }
 
   .nyuka-display {
@@ -177,10 +183,14 @@
 
 <!-- ========== 納入日 ========== -->
 <div class="screen" id="s-date">
-  <h1>納入日を選択</h1>
+  <h1 id="dateTitle">納入日を選択</h1>
   <div class="sub" id="dateMakerInfo">—</div>
-  <div id="datePendingBanner" class="resume" style="display:none;"></div>
-  <div class="card">
+
+  <!-- 未送信データが残っている場合はこちらだけを表示（日付選択は出さない） -->
+  <div id="datePendingBlock" class="card" style="display:none;"></div>
+
+  <!-- 未送信データが無い、通常の日付選択 -->
+  <div id="dateNormalBlock" class="card">
     <div style="font-size:13px;color:var(--sub);margin-bottom:8px;">デフォルト（メーカー設定）が選択済みです。変更する場合は下から選択。</div>
     <div class="datelist" id="dateList"></div>
     <button class="primary full" onclick="startScanning()">この日で読取開始</button>
@@ -245,9 +255,9 @@
   <div class="rev-wrap">
     <table class="rev-table">
       <colgroup>
-        <col class="c-hinban"><col class="c-num"><col class="c-num"><col class="c-num"><col class="c-suryou"><col class="c-del">
+        <col class="c-hinban"><col class="c-hako"><col class="c-suryou"><col class="c-del">
       </colgroup>
-      <thead><tr><th>品番</th><th>箱数</th><th>端数</th><th>破壊</th><th>数量</th><th></th></tr></thead>
+      <thead><tr><th>品番</th><th>箱数</th><th>数量</th><th></th></tr></thead>
       <tbody id="revBody"></tbody>
     </table>
   </div>
@@ -329,7 +339,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.25';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
+const APP_VERSION = 'v1.27';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzALEt3uPha_JbW7USYz8Q3TJnbg9gJauFe9yTEC3KqPrIqChkBLb-Tj0kt5WjqlMor/exec';
 
 const MAKERS_FALLBACK = ['大澤熔接工業所','清国溶接','小山製作所','山田鉄工所','丸磯工業所','花木製作所','羽谷工業所','伊藤プレス','メタルクリーン','マルマツ','ウエルギコウ','松原工業所','安井鉄工所','真鍋工業','向井工作所','大動工業','アクトメタル','日本グラス','エバー','トライ','村田工業所','檜山技研工業所','加藤技研工業所','トヨアケメッキ','福洋精工'];
@@ -432,17 +442,11 @@ function setAuthSets(){
   toriSet   = (auth && auth.torihiki && auth.torihiki.length) ? new Set(auth.torihiki.map(x=>String(x).trim())) : null;
 }
 
-function resumePending(){
-  chosenDate = pending.shukkaDate;
-  rebuildQrSeen();
-  renderReview();
-  show('s-review');
-}
 function discardPending(){
   showConfirm('未送信データを破棄します。よろしいですか？', function(){
     ldel(K_PENDING); pending = null; qrSeen = new Set();
     const rb = document.getElementById('resumeBox'); if (rb) rb.style.display = 'none';
-    const db = document.getElementById('datePendingBanner'); if (db) db.style.display = 'none';
+    if (auth) renderPendingBanner();
   });
 }
 
@@ -516,19 +520,30 @@ function jpDate(d){
   return (d.getMonth()+1) + '/' + d.getDate() + '（' + w + '）';
 }
 
-// 納入日画面で「未送信データがある」ことを常に見えるようにする。
-// 今ログイン中のメーカーのものなら確認・送信の導線、別メーカーのものなら混在しないよう警告する。
+// 納入日画面：未送信データが残っている場合は、日付選択を出さず「続きを読み取る／破棄する」の
+// 専用画面にする（選択肢を絞ってわかりやすくするため。確認・送信はスキャン画面側の
+// 「読取おわり・確認へ」から行う導線に一本化）。別メーカーの未送信データが残っている場合は
+// ログインし直すか破棄するかの二択にする。
 function renderPendingBanner(){
-  const el = document.getElementById('datePendingBanner');
-  if (!pending || !pending.scans || !pending.scans.length){ el.style.display = 'none'; return; }
-  el.style.display = 'block';
+  const pendingBlock = document.getElementById('datePendingBlock');
+  const normalBlock = document.getElementById('dateNormalBlock');
+  const title = document.getElementById('dateTitle');
+  if (!pending || !pending.scans || !pending.scans.length){
+    pendingBlock.style.display = 'none';
+    normalBlock.style.display = 'block';
+    title.textContent = '納入日を選択';
+    return;
+  }
+  normalBlock.style.display = 'none';
+  pendingBlock.style.display = 'block';
   if (pending.maker === auth.maker){
-    el.innerHTML = '📦 未送信 ' + pending.scans.length + '枚（納入日 ' + esc(pending.shukkaDate) + '）があります。'
+    title.textContent = '未送信データがあります';
+    pendingBlock.innerHTML = '📦 納入日 ' + esc(pending.shukkaDate) + '　' + pending.scans.length + '枚、まだ送信していません。'
       + '<br><button class="primary full" onclick="continuePending()">続きを読み取る</button>'
-      + '<button class="ghost full" onclick="resumePending()">確認・送信する</button>'
       + '<button class="ghost full" onclick="discardPending()">このデータを破棄する</button>';
   } else {
-    el.innerHTML = '⚠️ 別メーカー「' + esc(pending.maker) + '」の未送信データ ' + pending.scans.length + '枚が残っています。'
+    title.textContent = '別メーカーの未送信データがあります';
+    pendingBlock.innerHTML = '⚠️ 別メーカー「' + esc(pending.maker) + '」の未送信データ ' + pending.scans.length + '枚が残っています。'
       + '<br>送信するには一度「' + esc(pending.maker) + '」でログインし直してください。'
       + '<br><button class="ghost full" onclick="logout()">ログイン画面へ</button>'
       + '<button class="ghost full" onclick="discardPending()">このデータを破棄する</button>';
@@ -1001,10 +1016,14 @@ function renderReview(){
     const h = it.hinban;
     const hAttr = esc(h);
     return '<tr>'
-      + '<td>' + esc(h) + '</td>'
+      + '<td>'
+        + '<div class="hinban-name">' + esc(h) + '</div>'
+        + '<div class="rev-tags">'
+          + '<span class="rev-tag numtap' + (it.hasuu===''?' empty':'') + '" data-h="' + hAttr + '" data-key="hasuu">端数' + (it.hasuu!==''?it.hasuu:'—') + '</span>'
+          + '<span class="rev-tag numtap' + (it.hakai===''?' empty':'') + '" data-h="' + hAttr + '" data-key="hakai">破壊' + (it.hakai!==''?it.hakai:'—') + '</span>'
+        + '</div>'
+      + '</td>'
       + '<td class="hako">' + it.hako + '</td>'
-      + '<td><span class="miniinput rev-num numtap' + (it.hasuu===''?' empty':'') + '" data-h="' + hAttr + '" data-key="hasuu">' + (it.hasuu!==''?it.hasuu:'—') + '</span></td>'
-      + '<td><span class="miniinput rev-num numtap' + (it.hakai===''?' empty':'') + '" data-h="' + hAttr + '" data-key="hakai">' + (it.hakai!==''?it.hakai:'—') + '</span></td>'
       + '<td class="suryou">' + it.suryou + '</td>'
       + '<td><span class="rev-del" data-h="' + hAttr + '" title="この品番を削除">✕</span></td>'
       + '</tr>';

@@ -40,6 +40,10 @@
   .full { width:100%; flex:none; margin-top:8px; }
 
   .camwrap { position:relative; width:100%; aspect-ratio:1/1; background:#000; border-radius:14px; overflow:hidden; margin-bottom:8px; }
+  /* ネイティブアプリ内で動く時：カメラ映像はwebviewの裏にあるネイティブビューが表示するため、
+     このwrap自体は透明にして、下のネイティブカメラが透けて見えるようにする。 */
+  .camwrap.native-cam { background:transparent; }
+  .camwrap.native-cam #v { display:none; }
   /* QRをこの枠いっぱいに収めてもらうための目安線。実際の読取は画面全体（フルフレーム）で行うため、
      この枠は「ここに収めると読み取りやすい」という距離感のガイドに過ぎない。 */
   .guide { position:absolute; inset:12% ; border:3px solid rgba(255,255,255,.85); border-radius:12px;
@@ -346,7 +350,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.35';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
+const APP_VERSION = 'v1.36';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzALEt3uPha_JbW7USYz8Q3TJnbg9gJauFe9yTEC3KqPrIqChkBLb-Tj0kt5WjqlMor/exec';
 
 const MAKERS_FALLBACK = ['大澤熔接工業所','清国溶接','小山製作所','山田鉄工所','丸磯工業所','花木製作所','羽谷工業所','伊藤プレス','メタルクリーン','マルマツ','ウエルギコウ','松原工業所','安井鉄工所','真鍋工業','向井工作所','大動工業','アクトメタル','日本グラス','エバー','トライ','村田工業所','檜山技研工業所','加藤技研工業所','トヨアケメッキ','福洋精工'];
@@ -643,13 +647,46 @@ function continuePending(){
 }
 
 /* ================= カメラ / デコード ================= */
+// ネイティブアプリ（受入QRスキャンAndroidアプリ）内のWebViewとして動いている場合、
+// window.AndroidBridge が注入されている。この場合はブラウザのgetUserMedia/jsQRを使わず、
+// ネイティブ側のCameraX+ML Kitにカメラ操作を委譲し、読み取り結果はonDecode(raw)へ直接渡してもらう。
+const NATIVE = !!(window.AndroidBridge);
 let stream=null, track=null, video=document.getElementById('v');
 let cv=document.createElement('canvas'), cx=cv.getContext('2d',{willReadFrequently:true});
 let running=false, paused=false, torchOn=false;
 let armed=true, emptyStreak=0, acceptedRaw='', lastAcceptTs=0, lastLoopTs=0;
 let dbgFrame='—', dbgLast='—', dbgErr='—', isoInfo='—';
 
-async function startCamera(){
+// ネイティブのカメラプレビューを、.camwrapの実際の画面上の位置・サイズに正確に重ねるための通知。
+// スキャン画面表示直後・リサイズ・回転のたびに呼ぶ。
+function reportCamRect(){
+  if (!NATIVE) return;
+  const el = document.querySelector('.camwrap');
+  if (!el) return;
+  const r = el.getBoundingClientRect();
+  if (r.width <= 0 || r.height <= 0) return;
+  window.AndroidBridge.setCamRect(r.left, r.top, r.width, r.height, window.devicePixelRatio || 1);
+}
+window.addEventListener('resize', reportCamRect);
+window.addEventListener('orientationchange', function(){ setTimeout(reportCamRect, 250); });
+
+function startCamera(){
+  if (NATIVE){
+    document.querySelector('.camwrap').classList.add('native-cam');
+    document.getElementById('dbg').textContent = 'ネイティブカメラ（CameraX + ML Kit）';
+    armed=true; emptyStreak=0; acceptedRaw=''; paused=false;
+    document.getElementById('btnPause').textContent = '⏸ 一時停止';
+    running=true;
+    showResult('idle', '📷 かざしてください');
+    requestAnimationFrame(()=>requestAnimationFrame(function(){
+      reportCamRect();
+      window.AndroidBridge.startCamera();
+    }));
+    return;
+  }
+  startCameraWeb();
+}
+async function startCameraWeb(){
   running=false; stopCamera();
   document.getElementById('err') && (document.getElementById('err').textContent='');
   try {
@@ -705,12 +742,14 @@ function refreshResultForLastHinban(){
 }
 function stopCamera(){
   running=false;
+  if (NATIVE){ window.AndroidBridge.stopCamera(); return; }
   if (stream){ stream.getVideoTracks().forEach(t=>t.stop()); stream=null; track=null; }
 }
 // ピント合わせをやり直す。continuous AFが合わないまま固まってしまう端末があるため、
 // 一度single-shotに切ってから戻すことで再ロックを促す。タップ操作／自動どちらからも使う。
 let focusPulseTimer = null;
 async function pulseFocus(){
+  if (NATIVE){ window.AndroidBridge.pulseFocus(); return; }
   if (!track) return;
   try {
     await track.applyConstraints({ advanced:[{ focusMode:'single-shot' }] });
@@ -720,7 +759,7 @@ async function pulseFocus(){
     }, 900);
   } catch(e){}
 }
-video.addEventListener('click', pulseFocus);
+document.querySelector('.camwrap').addEventListener('click', pulseFocus);
 function schedule(){
   if (!running) return;
   if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) video.requestVideoFrameCallback(loop);
@@ -1155,6 +1194,7 @@ let historyData = [];
 function openHistory(){
   pausedBeforeHistory = paused;
   paused = true;
+  if (NATIVE) window.AndroidBridge.setPaused(true);
   renderHistoryList();
   show('s-history');
 }
@@ -1206,6 +1246,7 @@ function showHistoryDetail(i){
 }
 function closeHistory(){
   paused = pausedBeforeHistory;
+  if (NATIVE) window.AndroidBridge.setPaused(paused);
   document.getElementById('btnPause').textContent = paused ? '▶ 再開' : '⏸ 一時停止';
   updateScanHeader();
   show('s-scan');
@@ -1213,10 +1254,20 @@ function closeHistory(){
 
 /* ================= 一時停止 / ライト ================= */
 function togglePause(){
+  if (NATIVE){
+    paused = window.AndroidBridge.togglePause();
+    document.getElementById('btnPause').textContent = paused ? '▶ 再開' : '⏸ 一時停止';
+    return;
+  }
   paused = !paused;
   document.getElementById('btnPause').textContent = paused ? '▶ 再開' : '⏸ 一時停止';
 }
 async function toggleTorch(){
+  if (NATIVE){
+    torchOn = window.AndroidBridge.toggleTorch();
+    document.getElementById('btnTorch').textContent = torchOn ? '🔦 ライト ON' : '🔦 ライト';
+    return;
+  }
   if (!track) return;
   const requestedOn = !torchOn;
   try {

@@ -670,6 +670,8 @@ function reportCamRect(){
 }
 window.addEventListener('resize', reportCamRect);
 window.addEventListener('orientationchange', function(){ setTimeout(reportCamRect, 250); });
+// スクロールすると.camwrapの画面上の位置がずれるため、その都度ネイティブへ追従させる
+window.addEventListener('scroll', reportCamRect, { passive:true });
 
 // ネイティブのカメラ映像はWebViewの「上」に重ねて表示している（透過合成に頼らない）ため、
 // 確認モーダル・端数入力シート・テンキー・履歴画面など、web側が何かをカメラより手前に出したい時は
@@ -1359,4 +1361,13 @@ function pushDummyHistory(){ try { history.pushState({ ukeireScan: true }, ''); 
 window.addEventListener('popstate', function () {
   pushDummyHistory();
   const hasUnsent = pending && pending.scans && pending.scans.length;
-  const onLogin 
+  const onLogin = document.getElementById('s-login').classList.contains('on');
+  if (onLogin) return;   // ログイン画面まで戻ってきているなら、そこは普通の画面として扱う
+  if (hasUnsent) {
+    showConfirm('未送信のデータ（' + pending.scans.length + '枚）があります。\nログイン画面に戻りますか？\n（データは保持されます）', logout);
+  }
+});
+pushDummyHistory();
+</script>
+</body>
+</html>

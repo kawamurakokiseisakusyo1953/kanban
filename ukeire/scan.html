@@ -847,11 +847,12 @@ let rejCounts = { format:0, dup:0, tori:0, master:0 };
 const REJ_LABEL = { format:'NG', dup:'重複', tori:'他社', master:'マスタ外' };
 
 function onDecode(raw){
+  if (NATIVE) console.log('[decode] len=' + raw.length + ' armed=' + armed + ' sameAsAccepted=' + (raw===acceptedRaw) + ' dt=' + (performance.now()-lastAcceptTs).toFixed(0));
   const now = performance.now();
-  if (now - lastAcceptTs < FLOOR_MS) return;
+  if (now - lastAcceptTs < FLOOR_MS) { if (NATIVE) console.log('[decode] skip: FLOOR_MS'); return; }
   if (!armed){
     if (raw !== acceptedRaw) armed = true;
-    else return;
+    else { if (NATIVE) console.log('[decode] skip: same raw, not armed'); return; }
   }
 
   const bypass = document.getElementById('bypass').checked;
@@ -1358,13 +1359,4 @@ function pushDummyHistory(){ try { history.pushState({ ukeireScan: true }, ''); 
 window.addEventListener('popstate', function () {
   pushDummyHistory();
   const hasUnsent = pending && pending.scans && pending.scans.length;
-  const onLogin = document.getElementById('s-login').classList.contains('on');
-  if (onLogin) return;   // ログイン画面まで戻ってきているなら、そこは普通の画面として扱う
-  if (hasUnsent) {
-    showConfirm('未送信のデータ（' + pending.scans.length + '枚）があります。\nログイン画面に戻りますか？\n（データは保持されます）', logout);
-  }
-});
-pushDummyHistory();
-</script>
-</body>
-</html>
+  const onLogin 

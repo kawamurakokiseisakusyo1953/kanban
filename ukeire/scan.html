@@ -662,16 +662,47 @@ let dbgFrame='—', dbgLast='—', dbgErr='—', isoInfo='—';
 function reportCamRect(){
   if (!NATIVE) return;
   const el = document.querySelector('.camwrap');
-  if (!el) return;
+  if (!el) { console.log('[cam] .camwrap not found'); return; }
   const r = el.getBoundingClientRect();
-  if (r.width <= 0 || r.height <= 0) return;
+  console.log('[cam] rect left=' + r.left + ' top=' + r.top + ' width=' + r.width + ' height=' + r.height + ' dpr=' + (window.devicePixelRatio||1));
+  if (r.width <= 0 || r.height <= 0) { console.log('[cam] rect skipped (zero size)'); return; }
   window.AndroidBridge.setCamRect(r.left, r.top, r.width, r.height, window.devicePixelRatio || 1);
 }
 window.addEventListener('resize', reportCamRect);
 window.addEventListener('orientationchange', function(){ setTimeout(reportCamRect, 250); });
 
+// ネイティブのカメラ映像はWebViewの「上」に重ねて表示している（透過合成に頼らない）ため、
+// 確認モーダル・端数入力シート・テンキー・履歴画面など、web側が何かをカメラより手前に出したい時は
+// 必ずカメラを隠す/見せるをネイティブに伝える必要がある。呼び出し漏れを防ぐため、個々の画面・
+// シートの開閉関数を1つずつ追いかけるのではなく、それらが必ず操作するclass属性の変化を
+// MutationObserverで監視し、状態が変わるたびに一括で判定し直す。
+function computeCamVisible(){
+  if (!NATIVE) return false;
+  const scanScreen = document.getElementById('s-scan');
+  if (!scanScreen || !scanScreen.classList.contains('on')) return false;
+  const blockerIds = ['modalOverlay', 'extraSheet', 'numpadSheet'];
+  for (const id of blockerIds){
+    const el = document.getElementById(id);
+    if (el && el.classList.contains('on')) return false;
+  }
+  return true;
+}
+let lastCamVisible = null;
+function syncCamVisible(){
+  if (!NATIVE) return;
+  const visible = computeCamVisible();
+  if (visible === lastCamVisible) return;
+  lastCamVisible = visible;
+  window.AndroidBridge.setCameraVisible(visible);
+  if (visible) reportCamRect();
+}
+if (NATIVE){
+  new MutationObserver(syncCamVisible).observe(document.body, { attributes:true, attributeFilter:['class'], subtree:true });
+}
+
 function startCamera(){
   if (NATIVE){
+    console.log('[cam] startCamera native branch');
     document.querySelector('.camwrap').classList.add('native-cam');
     document.getElementById('dbg').textContent = 'ネイティブカメラ（CameraX + ML Kit）';
     armed=true; emptyStreak=0; acceptedRaw=''; paused=false;
@@ -1194,7 +1225,6 @@ let historyData = [];
 function openHistory(){
   pausedBeforeHistory = paused;
   paused = true;
-  if (NATIVE) window.AndroidBridge.setPaused(true);
   renderHistoryList();
   show('s-history');
 }
@@ -1246,7 +1276,6 @@ function showHistoryDetail(i){
 }
 function closeHistory(){
   paused = pausedBeforeHistory;
-  if (NATIVE) window.AndroidBridge.setPaused(paused);
   document.getElementById('btnPause').textContent = paused ? '▶ 再開' : '⏸ 一時停止';
   updateScanHeader();
   show('s-scan');

@@ -659,6 +659,12 @@ let dbgFrame='—', dbgLast='—', dbgErr='—', isoInfo='—';
 
 // ネイティブのカメラプレビューを、.camwrapの実際の画面上の位置・サイズに正確に重ねるための通知。
 // スキャン画面表示直後・リサイズ・回転のたびに呼ぶ。
+// ネイティブ側で「空フレームがCLEAR_FRAMES続いた」と判定した時に呼ばれる。
+// web版のloop()内の `if (!armed && emptyStreak >= CLEAR_FRAMES){ armed = true; }` と同じ役割。
+// これが無いと、同じ札を一度離してもう一度読ませても「まだarmed=falseのまま」で
+// 受理も重複エラーも出ずに完全に無視されてしまう。
+function nativeRearm(){ armed = true; }
+
 function reportCamRect(){
   if (!NATIVE) return;
   const el = document.querySelector('.camwrap');

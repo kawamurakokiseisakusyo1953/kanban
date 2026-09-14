@@ -346,7 +346,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.31';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
+const APP_VERSION = 'v1.32';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzALEt3uPha_JbW7USYz8Q3TJnbg9gJauFe9yTEC3KqPrIqChkBLb-Tj0kt5WjqlMor/exec';
 
 const MAKERS_FALLBACK = ['大澤熔接工業所','清国溶接','小山製作所','山田鉄工所','丸磯工業所','花木製作所','羽谷工業所','伊藤プレス','メタルクリーン','マルマツ','ウエルギコウ','松原工業所','安井鉄工所','真鍋工業','向井工作所','大動工業','アクトメタル','日本グラス','エバー','トライ','村田工業所','檜山技研工業所','加藤技研工業所','トヨアケメッキ','福洋精工'];
@@ -654,7 +654,7 @@ async function startCamera(){
   document.getElementById('err') && (document.getElementById('err').textContent='');
   try {
     stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode:{ideal:'environment'}, width:{ideal:1920}, height:{ideal:1080} }, audio:false
+      video: { facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720} }, audio:false
     });
   } catch(e){
     showAlert('カメラ起動失敗: ' + e.name + ' / ' + e.message); return;
@@ -664,6 +664,7 @@ async function startCamera(){
   try { await track.applyConstraints({ advanced:[{ focusMode:'continuous' }] }); } catch(e){}
   let caps={}; try { caps = track.getCapabilities ? track.getCapabilities() : {}; } catch(e){}
   document.getElementById('btnTorch').disabled = !caps.torch;
+  initNativeDetector();
 
   armed=true; emptyStreak=0; acceptedRaw=''; paused=false;
   document.getElementById('btnPause').textContent = '⏸ 一時停止';
@@ -714,6 +715,20 @@ function schedule(){
   if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) video.requestVideoFrameCallback(loop);
   else setTimeout(loop, LOOP_MIN_MS);
 }
+// 端末のネイティブ検出（Android ChromeのML Kitベース）が使えれば先に試す。
+// 暗所・斜め・多少のブレに対してjsQR（純JS）より強いことが多いが、機種によっては逆に弱いこともあるため、
+// 「失敗したらjsQRにフォールバック」という保険つきでのみ使う（これ単体に置き換えない）。
+let nativeDetector = null, nativeDetectorTried = false;
+async function initNativeDetector(){
+  if (nativeDetectorTried) return;
+  nativeDetectorTried = true;
+  try {
+    if ('BarcodeDetector' in window) {
+      const formats = await window.BarcodeDetector.getSupportedFormats();
+      if (formats.includes('qr_code')) nativeDetector = new window.BarcodeDetector({ formats:['qr_code'] });
+    }
+  } catch(e){ nativeDetector = null; }
+}
 async function loop(){
   if (!running) return;
   if (paused){ schedule(); return; }
@@ -723,17 +738,25 @@ async function loop(){
   const vw=video.videoWidth, vh=video.videoHeight;
   if (!vw || !vh){ schedule(); return; }
   dbgFrame = vw+'x'+vh;
+
+  let raw=null;
+  if (nativeDetector){
+    try {
+      const codes = await nativeDetector.detect(video);
+      if (codes && codes.length) raw = codes[0].rawValue;
+    } catch(e){ /* フォールバックへ */ }
+  }
   if (cv.width !== vw){ cv.width=vw; cv.height=vh; }
   cx.drawImage(video, 0, 0, vw, vh);
 
-  let raw=null;
   try {
-    if (typeof jsQR === 'function'){
+    if (raw == null && typeof jsQR === 'function'){
       const img = cx.getImageData(0,0,vw,vh);
       const c = jsQR(img.data, vw, vh, { inversionAttempts:'attemptBoth' });
       if (c && c.data) raw = c.data;
       dbgErr='—';
-    } else dbgErr='jsQR未ロード';
+    } else if (typeof jsQR !== 'function') dbgErr='jsQR未ロード';
+    else dbgErr='—（ネイティブ検出）';
   } catch(e){ dbgErr = (e.name||'')+' '+(e.message||''); }
 
   if (raw != null){ dbgLast = raw.length; emptyStreak = 0; onDecode(raw); }
@@ -1205,10 +1228,26 @@ function togglePause(){
 }
 async function toggleTorch(){
   if (!track) return;
-  torchOn = !torchOn;
-  try { await track.applyConstraints({ advanced:[{ torch: torchOn }] });
+  const requestedOn = !torchOn;
+  try {
+    await track.applyConstraints({ advanced:[{ torch: requestedOn }] });
+    // applyConstraintsが成功を返しても、実際にはライトが点いていない機種がある。
+    // 可能なら実際の状態を読み直し、要求と食い違っていればハッキリ伝える（無言で効いてない状態を防ぐ）。
+    let actuallyOn = requestedOn;
+    try {
+      const s = track.getSettings ? track.getSettings() : {};
+      if (typeof s.torch === 'boolean') actuallyOn = s.torch;
+    } catch(e){}
+    torchOn = actuallyOn;
     document.getElementById('btnTorch').textContent = torchOn ? '🔦 ライト ON' : '🔦 ライト';
-  } catch(e){ torchOn = !torchOn; }
+    if (requestedOn && !actuallyOn) {
+      showAlert('この端末はライトの制御に対応していない可能性があります。実際に点灯しているか確認してください。');
+    }
+  } catch(e){
+    torchOn = false;
+    document.getElementById('btnTorch').textContent = '🔦 ライト';
+    showAlert('この端末ではライトを操作できませんでした。');
+  }
 }
 
 /* ================= 音 ================= */

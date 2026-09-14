@@ -40,6 +40,10 @@
   .full { width:100%; flex:none; margin-top:8px; }
 
   .camwrap { position:relative; width:100%; aspect-ratio:1/1; background:#000; border-radius:14px; overflow:hidden; margin-bottom:8px; }
+  /* QRをこの枠いっぱいに収めてもらうための目安線。実際の読取は画面全体（フルフレーム）で行うため、
+     この枠は「ここに収めると読み取りやすい」という距離感のガイドに過ぎない。 */
+  .guide { position:absolute; inset:12% ; border:3px solid rgba(255,255,255,.85); border-radius:12px;
+           box-shadow:0 0 0 999px rgba(0,0,0,.25); pointer-events:none; }
   #v { width:100%; height:100%; object-fit:cover; display:block; }
   .flash { position:absolute; inset:0; opacity:0; transition:opacity .08s; pointer-events:none;
            display:flex; align-items:center; justify-content:center; font-size:38px; font-weight:900; }
@@ -212,6 +216,7 @@
   <div class="camwrap">
     <video id="v" playsinline autoplay muted></video>
     <div class="flash" id="flash"></div>
+    <div class="guide"></div>
   </div>
 
   <div class="resultbox idle" id="resultBox">📷 かざしてください</div>
@@ -341,7 +346,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.29';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
+const APP_VERSION = 'v1.31';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzALEt3uPha_JbW7USYz8Q3TJnbg9gJauFe9yTEC3KqPrIqChkBLb-Tj0kt5WjqlMor/exec';
 
 const MAKERS_FALLBACK = ['大澤熔接工業所','清国溶接','小山製作所','山田鉄工所','丸磯工業所','花木製作所','羽谷工業所','伊藤プレス','メタルクリーン','マルマツ','ウエルギコウ','松原工業所','安井鉄工所','真鍋工業','向井工作所','大動工業','アクトメタル','日本グラス','エバー','トライ','村田工業所','檜山技研工業所','加藤技研工業所','トヨアケメッキ','福洋精工'];
@@ -350,6 +355,7 @@ const QR_MIN = 63, QR_MAX = 350;
 const FLOOR_MS = 350;
 const CLEAR_FRAMES = 3;
 const LOOP_MIN_MS = 90;
+const REFOCUS_EVERY_FRAMES = 16;   // 約1.4秒読めない状態が続くごとにピント合わせをやり直す
 const AUTH_MAX_AGE_MS = 30 * 24 * 3600 * 1000;   // 記憶ログインの有効期間
 
 const K_AUTH = 'rcv_auth', K_PENDING = 'rcv_pending', K_HIST = 'rcv_history', K_DEV = 'rcv_device';
@@ -648,7 +654,7 @@ async function startCamera(){
   document.getElementById('err') && (document.getElementById('err').textContent='');
   try {
     stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720} }, audio:false
+      video: { facingMode:{ideal:'environment'}, width:{ideal:1920}, height:{ideal:1080} }, audio:false
     });
   } catch(e){
     showAlert('カメラ起動失敗: ' + e.name + ' / ' + e.message); return;
@@ -689,12 +695,20 @@ function stopCamera(){
   running=false;
   if (stream){ stream.getVideoTracks().forEach(t=>t.stop()); stream=null; track=null; }
 }
-video.addEventListener('click', async () => {
+// ピント合わせをやり直す。continuous AFが合わないまま固まってしまう端末があるため、
+// 一度single-shotに切ってから戻すことで再ロックを促す。タップ操作／自動どちらからも使う。
+let focusPulseTimer = null;
+async function pulseFocus(){
   if (!track) return;
-  try { await track.applyConstraints({ advanced:[{ focusMode:'single-shot' }] });
-    setTimeout(()=>{ track.applyConstraints({ advanced:[{ focusMode:'continuous' }] }).catch(()=>{}); }, 1400);
+  try {
+    await track.applyConstraints({ advanced:[{ focusMode:'single-shot' }] });
+    if (focusPulseTimer) clearTimeout(focusPulseTimer);
+    focusPulseTimer = setTimeout(() => {
+      track.applyConstraints({ advanced:[{ focusMode:'continuous' }] }).catch(()=>{});
+    }, 900);
   } catch(e){}
-});
+}
+video.addEventListener('click', pulseFocus);
 function schedule(){
   if (!running) return;
   if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) video.requestVideoFrameCallback(loop);
@@ -716,7 +730,7 @@ async function loop(){
   try {
     if (typeof jsQR === 'function'){
       const img = cx.getImageData(0,0,vw,vh);
-      const c = jsQR(img.data, vw, vh, { inversionAttempts:'dontInvert' });
+      const c = jsQR(img.data, vw, vh, { inversionAttempts:'attemptBoth' });
       if (c && c.data) raw = c.data;
       dbgErr='—';
     } else dbgErr='jsQR未ロード';
@@ -725,6 +739,9 @@ async function loop(){
   if (raw != null){ dbgLast = raw.length; emptyStreak = 0; onDecode(raw); }
   else {
     emptyStreak++;
+    // 「角度を変えないと読めない」＝オートフォーカスが合ったまま固まっている典型症状。
+    // 読み取れない状態がしばらく続いたら、操作を待たずに自動でピント合わせをやり直す。
+    if (emptyStreak > 0 && emptyStreak % REFOCUS_EVERY_FRAMES === 0) pulseFocus();
     // 再武装は「次を受け付けられる」ようにするだけ。結果表示は次の読取（成功/失敗）まで保持する
     // （＝札を離した瞬間に「かざしてください」で上書きして消えるのを防ぐ）。
     if (!armed && emptyStreak >= CLEAR_FRAMES){ armed = true; }

@@ -350,7 +350,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.38';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
+const APP_VERSION = 'v1.39';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzALEt3uPha_JbW7USYz8Q3TJnbg9gJauFe9yTEC3KqPrIqChkBLb-Tj0kt5WjqlMor/exec';
 
 const MAKERS_FALLBACK = ['大澤熔接工業所','清国溶接','小山製作所','山田鉄工所','丸磯工業所','花木製作所','羽谷工業所','伊藤プレス','メタルクリーン','マルマツ','ウエルギコウ','松原工業所','安井鉄工所','真鍋工業','向井工作所','大動工業','アクトメタル','日本グラス','エバー','トライ','村田工業所','檜山技研工業所','加藤技研工業所','トヨアケメッキ','福洋精工'];
@@ -813,8 +813,17 @@ async function loop(){
     if (typeof jsQR === 'function'){
       const img = cx.getImageData(0,0,vw,vh);
       const c = jsQR(img.data, vw, vh, { inversionAttempts:'attemptBoth' });
-      if (c && c.data) raw = c.data;
-      dbgErr='—';
+      if (c && c.data) { raw = c.data; dbgErr='—'; }
+      else {
+        // 通常のデコードに失敗した時だけ、コントラスト強調をかけて再挑戦する
+        // （毎フレームやると重いので、失敗した時のみの保険として使う）
+        const enhanced = contrastStretch(img);
+        if (enhanced){
+          const c2 = jsQR(enhanced.data, vw, vh, { inversionAttempts:'attemptBoth' });
+          if (c2 && c2.data){ raw = c2.data; dbgErr='(コントラスト強調で復帰)'; }
+          else dbgErr='—';
+        } else dbgErr='—';
+      }
     } else dbgErr='jsQR未ロード';
   } catch(e){ dbgErr = (e.name||'')+' '+(e.message||''); }
 
@@ -838,6 +847,31 @@ function showResult(kind, msg){
   const el = document.getElementById('resultBox');
   el.className = 'resultbox ' + kind;
   el.innerHTML = msg;   // 呼び出し側で <br> による改行を使うため innerHTML（埋め込む値は esc() 済みのこと）
+}
+
+// 通常デコードが失敗した時の保険：画面全体の明暗差（コントラスト）が弱い場合に、
+// 実際にある最小〜最大の明るさをフルレンジ(0〜255)まで引き伸ばして再デコードを試みる。
+// 光が斜めから当たって全体的に薄暗い・眠い絵になっているケースで、わずかに残っている
+// 濃淡差を強調して読み取れることがある（ただし元々ほとんど光が無いケースには効かない）。
+function contrastStretch(imgData){
+  const d = imgData.data;
+  let min = 255, max = 0;
+  // フル走査は重いため、5px間隔で間引いて明暗の範囲を推定する
+  for (let i = 0; i < d.length; i += 20){
+    const lum = d[i]*0.299 + d[i+1]*0.587 + d[i+2]*0.114;
+    if (lum < min) min = lum;
+    if (lum > max) max = lum;
+  }
+  const range = max - min;
+  if (range < 10) return null;   // 差がほぼ無ければ引き伸ばしても意味が無い
+  const out = new Uint8ClampedArray(d.length);
+  for (let i = 0; i < d.length; i += 4){
+    const lum = d[i]*0.299 + d[i+1]*0.587 + d[i+2]*0.114;
+    const v = Math.max(0, Math.min(255, ((lum - min) / range) * 255));
+    out[i] = out[i+1] = out[i+2] = v;
+    out[i+3] = 255;
+  }
+  return new ImageData(out, imgData.width, imgData.height);
 }
 
 /* ================= 読取判定（フェーズ順に判定） ================= */

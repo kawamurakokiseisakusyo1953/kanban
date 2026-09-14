@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>HIDスキャナ速度テスト</title>
+<style>
+  :root{ --bg:#f4f6fa; --card:#ffffff; --line:#dbe2ea; --txt:#1a2233; --sub:#66707e;
+         --accent:#2563eb; --ok:#16a34a; --warn:#b45309; --bad:#dc2626; }
+  html,body{ background:var(--bg); color:var(--txt); font-family:-apple-system,"Noto Sans JP",sans-serif; margin:0; }
+  body{ padding:14px 14px 60px; }
+  h1{ font-size:20px; margin:0 0 4px; }
+  .sub{ font-size:13px; color:var(--sub); margin-bottom:14px; }
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:12px; }
+  #target{ width:100%; box-sizing:border-box; font-size:20px; padding:14px; border:2px solid var(--accent);
+           border-radius:10px; font-family:monospace; }
+  #target:focus{ outline:none; box-shadow:0 0 0 3px rgba(37,99,235,.25); }
+  .hint{ font-size:13px; color:var(--sub); margin-top:8px; }
+  .row{ display:flex; gap:10px; margin-top:10px; }
+  button{ flex:1; padding:12px; font-size:15px; font-weight:700; border-radius:10px; border:1px solid var(--line);
+          background:#fff; cursor:pointer; }
+  button.primary{ background:var(--accent); color:#fff; border-color:var(--accent); }
+  .stat-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; }
+  .stat{ background:#f3f6fa; border-radius:10px; padding:10px; text-align:center; }
+  .stat .v{ font-size:22px; font-weight:900; color:var(--accent); }
+  .stat .l{ font-size:11px; color:var(--sub); margin-top:2px; }
+  .verdict{ margin-top:12px; padding:12px; border-radius:10px; font-weight:700; font-size:15px; }
+  .verdict.ok{ background:#eaf7ee; color:var(--ok); border:1px solid #bfe6c9; }
+  .verdict.bad{ background:#fdecec; color:var(--bad); border:1px solid #f5c2c2; }
+  .verdict.idle{ background:#f3f6fa; color:var(--sub); border:1px solid var(--line); }
+  .fields{ margin-top:10px; font-size:14px; }
+  .fields div{ padding:4px 0; border-bottom:1px solid var(--line); }
+  .fields b{ display:inline-block; width:110px; color:var(--sub); font-weight:600; }
+  .raw{ margin-top:10px; font-family:monospace; font-size:12px; word-break:break-all; background:#f3f6fa;
+        border-radius:8px; padding:10px; color:var(--sub); max-height:120px; overflow-y:auto; }
+  .hist-row{ padding:10px 4px; border-bottom:1px solid var(--line); font-size:13px; display:flex; justify-content:space-between; }
+  .hist-row:last-child{ border-bottom:none; }
+  .hist-ok{ color:var(--ok); font-weight:700; }
+  .hist-bad{ color:var(--bad); font-weight:700; }
+</style>
+</head>
+<body>
+  <h1>HIDスキャナ速度テスト</h1>
+  <div class="sub">Bluetooth HIDスキャナをこの端末に接続した状態で、下の枠にフォーカスしたままかんばんQRを読ませてください。</div>
+
+  <div class="card">
+    <input id="target" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+           placeholder="ここにフォーカスしてスキャン" />
+    <div class="hint">枠をタップしてフォーカスしてから読み取ってください。読み取り後、自動で判定します（Enterが来なくても0.4秒入力が止まれば判定します）。</div>
+    <div class="row">
+      <button onclick="resetTest()">クリアして次へ</button>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat"><div class="v" id="stCount">—</div><div class="l">文字数</div></div>
+      <div class="stat"><div class="v" id="stMs">—</div><div class="l">かかった時間(ms)</div></div>
+    </div>
+
+    <div class="verdict idle" id="verdict">読み取り待ち…</div>
+    <div class="fields" id="fields" style="display:none;">
+      <div><b>品番</b><span id="fHinban"></span></div>
+      <div><b>取引先コード</b><span id="fTori"></span></div>
+      <div><b>収容数</b><span id="fYoubun"></span></div>
+    </div>
+    <div class="raw" id="rawBox" style="display:none;"></div>
+  </div>
+
+  <div class="card">
+    <div class="sub" style="margin-bottom:6px;">履歴（この画面を開いている間だけ）</div>
+    <div id="histList"><div class="hint">まだありません</div></div>
+  </div>
+
+<script>
+// 実際のscan.htmlと同じ判定ロジック（品番・取引先コード・収容数の位置、フォーマットの妥当性）を流用。
+const QR_MIN = 63, QR_MAX = 350;
+
+const input = document.getElementById('target');
+let startTs = null, lastTs = null, debounceTimer = null;
+const DEBOUNCE_MS = 400;
+let history = [];
+
+function focusInput(){ input.focus(); }
+window.addEventListener('load', focusInput);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) focusInput(); });
+input.addEventListener('blur', () => { setTimeout(focusInput, 150); });
+
+input.addEventListener('input', () => {
+  const now = performance.now();
+  if (startTs === null) startTs = now;
+  lastTs = now;
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(finish, DEBOUNCE_MS);
+});
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter'){
+    e.preventDefault();
+    clearTimeout(debounceTimer);
+    finish();
+  }
+});
+
+function finish(){
+  const raw = input.value;
+  if (!raw){ return; }
+  const elapsed = (startTs != null && lastTs != null) ? Math.round(lastTs - startTs) : 0;
+  const count = raw.length;
+  document.getElementById('stCount').textContent = count + '文字';
+  document.getElementById('stMs').textContent = elapsed;
+
+  const okFormat = count >= QR_MIN && count <= QR_MAX
+                 && raw.slice(0,8) === '20110607' && raw.indexOf('000.0') !== -1;
+
+  const verdict = document.getElementById('verdict');
+  const fields = document.getElementById('fields');
+  const rawBox = document.getElementById('rawBox');
+  rawBox.style.display = 'block';
+  rawBox.textContent = raw;
+
+  if (okFormat){
+    const hinban = raw.substring(38, 63).trim();
+    const tori = raw.substring(20, 26).trim();
+    const youbun = parseInt(raw.substring(85, 92).trim(), 10) || 0;
+    verdict.className = 'verdict ok';
+    verdict.textContent = '✅ 正常なかんばんQRとして読み取れました';
+    fields.style.display = 'block';
+    document.getElementById('fHinban').textContent = hinban || '(空)';
+    document.getElementById('fTori').textContent = tori || '(空)';
+    document.getElementById('fYoubun').textContent = youbun || '(空)';
+    pushHistory(true, count, elapsed);
+  } else {
+    verdict.className = 'verdict bad';
+    let reason = '文字数が想定外（' + count + '文字。想定 ' + QR_MIN + '〜' + QR_MAX + '）';
+    if (raw.slice(0,8) !== '20110607') reason = '先頭8文字が一致しない（かんばんQRではない、または文字化け/欠落の可能性）';
+    else if (raw.indexOf('000.0') === -1) reason = '「000.0」が含まれない（内容の一部が欠落している可能性）';
+    verdict.textContent = '❌ かんばんQRとして判定できませんでした： ' + reason;
+    fields.style.display = 'none';
+    pushHistory(false, count, elapsed);
+  }
+}
+
+function pushHistory(ok, count, elapsed){
+  history.unshift({ ok, count, elapsed, t: new Date().toLocaleTimeString('ja-JP') });
+  history = history.slice(0, 20);
+  renderHistory();
+}
+function renderHistory(){
+  const box = document.getElementById('histList');
+  if (!history.length){ box.innerHTML = '<div class="hint">まだありません</div>'; return; }
+  box.innerHTML = history.map(h =>
+    '<div class="hist-row"><span>' + h.t + '　' + h.count + '文字　' + h.elapsed + 'ms</span>' +
+    '<span class="' + (h.ok ? 'hist-ok">OK' : 'hist-bad">NG') + '</span></div>'
+  ).join('');
+}
+
+function resetTest(){
+  input.value = '';
+  startTs = null; lastTs = null;
+  clearTimeout(debounceTimer);
+  document.getElementById('stCount').textContent = '—';
+  document.getElementById('stMs').textContent = '—';
+  document.getElementById('verdict').className = 'verdict idle';
+  document.getElementById('verdict').textContent = '読み取り待ち…';
+  document.getElementById('fields').style.display = 'none';
+  document.getElementById('rawBox').style.display = 'none';
+  focusInput();
+}
+</script>
+</body>
+</html>

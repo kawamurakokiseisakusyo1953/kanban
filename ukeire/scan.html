@@ -368,7 +368,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.58';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
+const APP_VERSION = 'v1.59';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzALEt3uPha_JbW7USYz8Q3TJnbg9gJauFe9yTEC3KqPrIqChkBLb-Tj0kt5WjqlMor/exec';
 
 const MAKERS_FALLBACK = ['大澤熔接工業所','清国溶接','小山製作所','山田鉄工所','丸磯工業所','花木製作所','羽谷工業所','伊藤プレス','メタルクリーン','マルマツ','ウエルギコウ','松原工業所','安井鉄工所','真鍋工業','向井工作所','大動工業','アクトメタル','日本グラス','エバー','トライ','村田工業所','檜山技研工業所','加藤技研工業所','トヨアケメッキ','福洋精工'];
@@ -489,7 +489,7 @@ function loadWithFreshAuthThenEnter(){
       }
     })
     .catch(()=>{ /* GASに届かなかった：何もしない。今のキャッシュのまま */ });
-  const timeout = new Promise(resolve => setTimeout(resolve, 10000)); // 保険：10秒で諦める
+  const timeout = new Promise(resolve => setTimeout(resolve, 30000)); // 保険：30秒で諦める
   Promise.race([req, timeout]).then(() => {
     masterFetchStatus = fetched ? 'fresh' : 'stale';
     enterDateScreen();

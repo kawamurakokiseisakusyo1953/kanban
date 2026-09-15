@@ -362,7 +362,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.52';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
+const APP_VERSION = 'v1.55';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzALEt3uPha_JbW7USYz8Q3TJnbg9gJauFe9yTEC3KqPrIqChkBLb-Tj0kt5WjqlMor/exec';
 
 const MAKERS_FALLBACK = ['大澤熔接工業所','清国溶接','小山製作所','山田鉄工所','丸磯工業所','花木製作所','羽谷工業所','伊藤プレス','メタルクリーン','マルマツ','ウエルギコウ','松原工業所','安井鉄工所','真鍋工業','向井工作所','大動工業','アクトメタル','日本グラス','エバー','トライ','村田工業所','檜山技研工業所','加藤技研工業所','トヨアケメッキ','福洋精工'];
@@ -394,6 +394,7 @@ let hinbanSet = null, toriSet = null;
 let qrSeen = new Set();                   // このpending内で既に受理した生QR（2度読み検知用）
 let chosenDate = '';                      // yyyy/MM/dd
 let scanSeq = 0;
+let masterFetchStatus = '';               // 'fresh' | 'offline' | 'stale' （納入日画面の小さな注記に使うだけ）
 
 function rebuildQrSeen(){
   qrSeen = new Set((pending && pending.scans ? pending.scans : []).map(s => s.qr));
@@ -434,37 +435,49 @@ window.addEventListener('load', () => {
   // ログイン記憶があれば、期限を気にせず常にログイン画面を自動スキップして納入日画面へ
   // （パスワードは永久に覚えたままでよい運用のため。ログアウトするまでずっとこのまま）。
   // ただしキャッシュしてある設定（受入納入日数・品番マスタ）は古い可能性があるので、
-  // このタイミングで裏側から最新を取りに行き、間に合えば即反映する
-  // （オフライン時や失敗時は何もせず、今まで通りキャッシュのまま動く）。
+  // オンラインなら最新を取りに行ってから（＝古い内容がチラ見えしてから切り替わる、を避けるため）
+  // 納入日画面を表示する。オフラインなら最初から待たずに今あるキャッシュで即表示する。
   if (auth){
     setAuthSets();
-    enterDateScreen();
-    refreshAuthInBackground();
+    if (navigator.onLine){
+      loadWithFreshAuthThenEnter();
+    } else {
+      masterFetchStatus = 'offline';
+      enterDateScreen();
+    }
   } else {
     renderResumeBoxOnLogin();
   }
 });
 
-// ログイン記憶を保ったまま、裏側で最新の設定・品番マスタを取り直す。
-// 成功すればキャッシュを更新し、まだ納入日画面にいるなら（＝読取をまだ始めていないなら）
-// 最新の内容で再描画する。失敗（オフライン等）やパスワード不一致等は何もせず、今のログインのまま続行する。
-function refreshAuthInBackground(){
-  if (!auth || !auth.maker) return;
-  fetch(GAS_URL, { method:'POST', headers:{'Content-Type':'text/plain'},
+// ログイン記憶を保ったまま、最新の設定・品番マスタを取ってから納入日画面を表示する
+// （オンラインの時だけ呼ばれる。表示は1回だけ＝あとから内容が差し替わってチラつくことはない）。
+// 「オンライン」のはずが実際にはGASに届かない場合（電波はあるがGAS側が重い等）に備えて、
+// 一定時間で諦めて今あるキャッシュのまま表示する保険も入れておく。
+// 取得自体が表示後に遅れて届いた場合は、次回起動時のためにキャッシュだけ静かに更新しておく。
+function loadWithFreshAuthThenEnter(){
+  let fetched = false;
+  const req = fetch(GAS_URL, { method:'POST', headers:{'Content-Type':'text/plain'},
                    body: JSON.stringify({ action:'login', maker: auth.maker, pw: auth.pw }) })
-    .then(r => r.json()).then(res => {
-    if (!res.ok) return;
-    auth = {
-      maker: res.maker, pw: auth.pw, offset: res.offset || 0,
-      hinbanReady: !!res.hinbanReady, hinban: res.hinban || [], torihiki: res.torihiki || [],
-      makers: res.makers || MAKERS_FALLBACK, ts: Date.now()
-    };
-    lset(K_AUTH, auth);
-    setAuthSets();
-    if (document.getElementById('s-date').classList.contains('on')){
-      enterDateScreen();
-    }
-  }).catch(()=>{ /* オフライン等：何もしない。今のキャッシュのまま動作を続ける */ });
+    .then(r => r.json())
+    .then(res => {
+      if (res && res.ok){
+        auth = {
+          maker: res.maker, pw: auth.pw, offset: res.offset || 0,
+          hinbanReady: !!res.hinbanReady, hinban: res.hinban || [], torihiki: res.torihiki || [],
+          makers: res.makers || MAKERS_FALLBACK, ts: Date.now()
+        };
+        lset(K_AUTH, auth);
+        setAuthSets();
+        fetched = true;
+      }
+    })
+    .catch(()=>{ /* GASに届かなかった：何もしない。今のキャッシュのまま */ });
+  const timeout = new Promise(resolve => setTimeout(resolve, 10000)); // 保険：10秒で諦める
+  Promise.race([req, timeout]).then(() => {
+    masterFetchStatus = fetched ? 'fresh' : 'stale';
+    enterDateScreen();
+  });
 }
 
 // ログイン画面用：ログインしていない状態で未送信データが残っている場合の案内
@@ -523,12 +536,14 @@ function doLogin(){
     };
     lset(K_AUTH, auth);
     setAuthSets();
+    masterFetchStatus = 'fresh';
     enterDateScreen();
   }).catch(e => {
     finishLoading();
     // オフライン：記憶ログインで通す
     if (auth && auth.maker === maker && auth.pw === pw){
       setAuthSets();
+      masterFetchStatus = 'stale';
       enterDateScreen();
     } else {
       err.textContent = 'ネットに繋がりません。初回ログインはオンラインで行ってください。';
@@ -597,8 +612,10 @@ function renderPendingBanner(){
 }
 
 function enterDateScreen(){
+  const statusNote = { fresh: '（最新取得済み）', offline: '（オフラインのためキャッシュ）', stale: '（取得できずキャッシュ）' }[masterFetchStatus] || '';
   document.getElementById('dateMakerInfo').textContent = auth.maker
-    + '　品番マスタ: ' + (auth.hinbanReady ? (auth.hinban.length + '件') : '未整備（照合スキップ）');
+    + '　品番マスタ: ' + (auth.hinbanReady ? (auth.hinban.length + '件') : '未整備（照合スキップ）')
+    + (statusNote ? '　' + statusNote : '');
   renderPendingBanner();
   const today = new Date();
   const def = addBusinessDays(today, auth.offset || 0);

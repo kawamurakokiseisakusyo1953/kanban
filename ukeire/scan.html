@@ -194,6 +194,12 @@
   <div id="err"></div>
 </div>
 
+<!-- ========== 起動中（ログイン記憶があり最新取得を待っている間だけ表示。
+     ログイン画面を一瞬見せてから納入日画面に切り替わると戸惑うため、待ち時間はこちらで隠す） ========== -->
+<div class="screen" id="s-boot">
+  <div style="text-align:center;padding-top:45vh;color:var(--sub);font-size:15px;">起動中…</div>
+</div>
+
 <!-- ========== 納入日 ========== -->
 <div class="screen" id="s-date">
   <h1><span id="dateTitle">納入日を選択</span> <a href="javascript:void(0)" onclick="openRecoveryQr()" style="font-size:12px;color:var(--sub);font-weight:400;">🔧復旧QR</a></h1>
@@ -362,7 +368,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.55';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
+const APP_VERSION = 'v1.57';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzALEt3uPha_JbW7USYz8Q3TJnbg9gJauFe9yTEC3KqPrIqChkBLb-Tj0kt5WjqlMor/exec';
 
 const MAKERS_FALLBACK = ['大澤熔接工業所','清国溶接','小山製作所','山田鉄工所','丸磯工業所','花木製作所','羽谷工業所','伊藤プレス','メタルクリーン','マルマツ','ウエルギコウ','松原工業所','安井鉄工所','真鍋工業','向井工作所','大動工業','アクトメタル','日本グラス','エバー','トライ','村田工業所','檜山技研工業所','加藤技研工業所','トヨアケメッキ','福洋精工'];
@@ -408,8 +414,17 @@ function show(id){
 }
 
 /* ================= ネット表示 ================= */
+// navigator.onLineはWebView内では信頼できないことがある（SIM無し端末でWiFiを切ってもtrueのまま、等）。
+// ネイティブアプリ側（Android本体のConnectivityManager）から本当の状態が届いていればそちらを優先し、
+// 届いていなければ（＝ブラウザ単体で開かれた場合の保険として）navigator.onLineにフォールバックする。
+function isOnline(){
+  return (typeof window.__nativeOnline === 'boolean') ? window.__nativeOnline : navigator.onLine;
+}
+// ネイティブ側から状態が変わるたびに呼ばれる（MainActivity.ktからevaluateJavascriptで直接呼び出し）。
+function onNativeOnlineChange(on){ netBadge(); }
+
 function netBadge(){
-  const on = navigator.onLine;
+  const on = isOnline();
   const t = on ? 'オンライン' : 'オフライン';
   const el = document.getElementById('netInfo'); if (el) el.textContent = '状態: ' + t;
   const b = document.getElementById('scNet');
@@ -439,7 +454,8 @@ window.addEventListener('load', () => {
   // 納入日画面を表示する。オフラインなら最初から待たずに今あるキャッシュで即表示する。
   if (auth){
     setAuthSets();
-    if (navigator.onLine){
+    show('s-boot'); // 取得を待つ間、ログイン画面ではなくこちらを見せておく
+    if (isOnline()){
       loadWithFreshAuthThenEnter();
     } else {
       masterFetchStatus = 'offline';
@@ -981,6 +997,10 @@ let rejCounts = { format:0, dup:0, tori:0, master:0 };
 const REJ_LABEL = { format:'NG', dup:'重複', tori:'他社', master:'マスタ外' };
 
 function onDecode(raw){
+  // スキャン画面が今表示されている時だけ受け付ける。Bluetoothスキャナはカメラと違い、
+  // 他の画面（納入日選択・確認・履歴等）にいる間も裏で繋がったままデータを送ってくることがあるため、
+  // ここで弾かないと画面遷移中に意図せず読み取ってしまう。
+  if (!document.getElementById('s-scan').classList.contains('on')) return;
   if (NATIVE) console.log('[decode] len=' + raw.length + ' armed=' + armed + ' sameAsAccepted=' + (raw===acceptedRaw) + ' dt=' + (performance.now()-lastAcceptTs).toFixed(0));
   const now = performance.now();
   if (now - lastAcceptTs < FLOOR_MS) { if (NATIVE) console.log('[decode] skip: FLOOR_MS'); return; }
@@ -1328,7 +1348,7 @@ function doSend(){
   const btn = document.getElementById('sendBtn');
   const err = document.getElementById('err2');
   err.textContent = '';
-  if (!navigator.onLine){ err.textContent = 'オフラインです。ネットに繋いでから送信してください。（データは保持されています）'; return; }
+  if (!isOnline()){ err.textContent = 'オフラインです。ネットに繋いでから送信してください。（データは保持されています）'; return; }
   if (pending.maker !== auth.maker){
     err.textContent = 'このデータはメーカー「' + pending.maker + '」のものです。一度そのメーカーでログインし直してください。';
     return;

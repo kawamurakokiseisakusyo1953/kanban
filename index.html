@@ -634,10 +634,12 @@ window.onload = () => {
         document.getElementById("header-maker").textContent = currentMaker;
         updateStartLoading("工程読み込み中…");
         fetchKoteiMaster(currentMaker, savedPw, (result) => {
-          hideStartLoading();
-          if (!result) return;
-          showScreen("screen-qr");
-          showWakeOverlay();
+          if (!result) { hideStartLoading(); return; }
+          fetchHinbanMaster(currentMaker, () => {
+            hideStartLoading();
+            showScreen("screen-qr");
+            showWakeOverlay();
+          });
         });
       } else {
         hideStartLoading();
@@ -715,15 +717,17 @@ function confirmLogin() {
   showStartLoading("工程読み込み中…");
 
   fetchKoteiMaster(makerName, pw, (result) => {
-    hideStartLoading();
-    if (!result) return;
+    if (!result) { hideStartLoading(); return; }
     localStorage.setItem("kanban_maker", makerName);
     localStorage.setItem("kanban_pw", pw);
     currentMaker = makerName;
     currentPassword = pw;
     document.getElementById("header-maker").textContent = currentMaker;
-    showScreen("screen-qr");
-    loadJsQR(() => startCamera());
+    fetchHinbanMaster(currentMaker, () => {
+      hideStartLoading();
+      showScreen("screen-qr");
+      loadJsQR(() => startCamera());
+    });
   });
 }
 
@@ -800,19 +804,36 @@ function startScan() {
   }, 300);
 }
 
+// 一定時間後にステータス表示を「読取待ち」に戻す共通ヘルパー（拒否時の表示用）
+function resetQrStatusAfter(ms) {
+  setTimeout(() => {
+    document.getElementById("qr-status").className = "qr-status";
+    document.getElementById("qr-status").textContent = "QRコードをフレームに合わせてください";
+  }, ms);
+}
+
 function onQRDetected(qr) {
   if (qr.length < 50) {
     document.getElementById("qr-status").className = "qr-status error";
     document.getElementById("qr-status").textContent = "かんばんQRではありません（" + qr.length + "文字）";
-    setTimeout(() => {
-      document.getElementById("qr-status").className = "qr-status";
-      document.getElementById("qr-status").textContent = "QRコードをフレームに合わせてください";
-    }, 2000);
+    resetQrStatusAfter(2000);
     return;
   }
+  const hinban = qr.substring(38, 63).trim() || "不明";
+  const kotei  = qr.substring(64, 66).trim() || "不明";
+
+  // 品番マスタ照合：マスタを読み込めていて1件以上ある取引先のみチェックする
+  // （CSV未整備の取引先まで巻き込んで止めてしまわないよう、マスタが空の場合は照合をスキップする）。
+  if (hinbanMasterList.length > 0 && !hinbanMasterList.some(h => h.hinban === hinban)) {
+    document.getElementById("qr-status").className = "qr-status error";
+    document.getElementById("qr-status").textContent = "品番マスタ不一致：品番「" + (hinban || "(空)") + "」はマスタにありません。再スキャンしてください";
+    resetQrStatusAfter(2500);
+    return;
+  }
+
   currentQR = qr;
-  currentHinban = qr.substring(38, 63).trim() || "不明";
-  currentKotei  = qr.substring(64, 66).trim() || "不明";
+  currentHinban = hinban;
+  currentKotei  = kotei;
   document.getElementById("qr-status").className = "qr-status success";
   document.getElementById("qr-status").textContent = "読み取り成功！";
   setTimeout(() => {
@@ -862,6 +883,26 @@ function fetchKoteiMaster(maker, pw, callback) {
     .catch(() => {
       showToast("マスタ取得エラー（ネット確認）");
       if (callback) callback(null);
+    });
+}
+
+// 品番マスタをGASから取得してhinbanMasterListへ反映（QR照合・手入力候補の両方が参照する）
+function fetchHinbanMaster(maker, callback) {
+  fetch(GAS_URL + "?action=getHinban&maker=" + encodeURIComponent(maker))
+    .then(r => r.json())
+    .then(json => {
+      if (json.status === "ok") {
+        hinbanMasterList = json.hinbanList;
+      } else {
+        hinbanMasterList = [];
+        showToast("品番マスタ取得失敗: " + json.message);
+      }
+      if (callback) callback();
+    })
+    .catch(() => {
+      hinbanMasterList = [];
+      showToast("品番マスタ取得エラー");
+      if (callback) callback();
     });
 }
 
@@ -1091,30 +1132,17 @@ function showManualInput() {
   document.getElementById("manual-selected").style.display = "none";
   document.getElementById("manual-empty").style.display = "none";
 
-  // 品番マスタを取得（未取得の場合のみ）
-  // 毎回マスタを再取得（メーカー切替対応）
-  hinbanMasterList = [];
+  // 品番マスタを再取得（メーカー切替対応。QR照合用にログイン時点で取得済みだが、
+  // その後マスタ側が更新されている可能性もあるためここでも取り直す）
   document.getElementById("manual-loading").style.display = "block";
   document.getElementById("manual-empty").style.display = "none";
-  fetch(GAS_URL + "?action=getHinban&maker=" + encodeURIComponent(currentMaker))
-    .then(r => r.json())
-    .then(json => {
-      document.getElementById("manual-loading").style.display = "none";
-      if (json.status === "ok") {
-        hinbanMasterList = json.hinbanList;
-        if (hinbanMasterList.length === 0) {
-          document.getElementById("manual-empty").style.display = "block";
-        }
-      } else {
-        showToast("品番マスタ取得失敗: " + json.message);
-      }
-      showManualKeyboard();
-    })
-    .catch(() => {
-      document.getElementById("manual-loading").style.display = "none";
-      showToast("品番マスタ取得エラー");
-      showManualKeyboard();
-    });
+  fetchHinbanMaster(currentMaker, () => {
+    document.getElementById("manual-loading").style.display = "none";
+    if (hinbanMasterList.length === 0) {
+      document.getElementById("manual-empty").style.display = "block";
+    }
+    showManualKeyboard();
+  });
 }
 
 function showKbCandidates() {

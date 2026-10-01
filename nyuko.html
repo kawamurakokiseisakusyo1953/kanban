@@ -1,0 +1,1323 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#f4f6fa">
+<title>QR入庫</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:#f4f6fa; --card:#ffffff; --line:#dbe2ea; --txt:#1a2233; --sub:#66707e;
+    --accent:#2563eb; --ok:#16a34a; --warn:#b45309; --bad:#dc2626;
+  }
+  html { overscroll-behavior: none; overscroll-behavior-y: none; }
+  html,body { background:var(--bg); color:var(--txt); font-family:-apple-system,"Noto Sans JP",sans-serif; }
+  body { padding:40px 10px 40px; overscroll-behavior: none; overscroll-behavior-y: none; overflow-x: hidden; touch-action: pan-y; }
+  h1 { font-size:19px; font-weight:800; margin-bottom:8px; }
+  .sub { color:var(--sub); font-size:12px; }
+  .screen { display:none; }
+  .screen.on { display:block; }
+
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:10px; }
+  label.fld { display:block; font-size:13px; color:var(--sub); margin:10px 0 6px; }
+  select, input[type=password], input[type=text], input[type=number] {
+    width:100%; background:var(--bg); border:1px solid var(--line); color:var(--txt);
+    border-radius:10px; padding:13px 14px; font-size:17px; font-weight:700; outline:none;
+  }
+  select:focus, input:focus { border-color:var(--accent); }
+
+  .row { display:flex; gap:8px; flex-wrap:wrap; }
+  button {
+    background:var(--card); border:1px solid var(--line); color:var(--txt);
+    border-radius:10px; padding:13px 14px; font-size:15px; font-weight:700; cursor:pointer; flex:1; min-width:100px;
+  }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.ok { background:var(--ok); border-color:var(--ok); color:#fff; }
+  button.ghost { background:transparent; }
+  button:active { opacity:.7; }
+  button[disabled] { opacity:.4; }
+  .full { width:100%; flex:none; margin-top:8px; }
+
+  .camwrap { position:relative; width:100%; aspect-ratio:1/1; background:#000; border-radius:14px; overflow:hidden; margin-bottom:8px; }
+  .camwrap.native-cam { background:transparent; }
+  .camwrap.native-cam #v { display:none; }
+  .guide { position:absolute; inset:12% ; border:3px solid rgba(255,255,255,.85); border-radius:12px;
+           box-shadow:0 0 0 999px rgba(0,0,0,.25); pointer-events:none; }
+  #v { width:100%; height:100%; object-fit:cover; display:block; }
+  .flash { position:absolute; inset:0; opacity:0; transition:opacity .08s; pointer-events:none;
+           display:flex; align-items:center; justify-content:center; font-size:38px; font-weight:900; }
+  .flash.ok { background:var(--ok); color:#fff; }
+  .flash.bad { background:var(--bad); color:#fff; }
+
+  .resultbox { font-size:16px; font-weight:800; padding:12px 14px; border-radius:12px; margin-bottom:8px; text-align:center; line-height:1.4; }
+  .resultbox.idle { background:var(--card); border:1px solid var(--line); color:var(--sub); }
+  .resultbox.ok   { background:rgba(22,163,74,.10); border:1px solid var(--ok); color:var(--ok); }
+  .resultbox.bad  { background:rgba(220,38,38,.10); border:1px solid var(--bad); color:var(--bad); }
+
+  .hd { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px; font-size:13px; }
+  .badge { background:var(--line); border-radius:20px; padding:5px 12px; font-weight:700; white-space:nowrap; }
+  .badge.warn { background:rgba(180,83,9,.12); color:var(--warn); border:1px solid var(--warn); }
+  .badge.off  { background:rgba(220,38,38,.12); color:var(--bad); border:1px solid var(--bad); }
+  .badge.tap  { cursor:pointer; border:1px solid var(--accent); }
+  .badge.tap:active { opacity:.7; }
+  /* モードバッジ：通常時は目立たせない。karaburi(空箱)/hamidasi(はみ出し)の時だけ色で強調する。 */
+  .badge.mode-karaburi { background:rgba(180,83,9,.15); color:var(--warn); border:1px solid var(--warn); }
+  .badge.mode-hamidasi { background:rgba(37,99,235,.15); color:var(--accent); border:1px solid var(--accent); }
+
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th,td { text-align:left; padding:9px 6px; border-bottom:1px solid var(--line); }
+  th { color:var(--sub); font-size:12px; }
+  td.num { text-align:right; font-weight:800; }
+  tr.bad td { color:var(--bad); }
+  .taprow { cursor:pointer; }
+  .taprow:active { background:rgba(0,0,0,.04); }
+  .miniinput { display:inline-block; min-width:40px; padding:6px 8px; font-size:14px; font-weight:800; text-align:center;
+               border:2px solid var(--line); border-radius:8px; cursor:pointer; }
+  .miniinput:active { background:rgba(0,0,0,.05); }
+  .miniinput.empty { color:var(--sub); font-weight:400; }
+
+  .rev-wrap { overflow-x:auto; }
+  .rev-table { width:100%; border-collapse:collapse; font-size:14px; table-layout:fixed; }
+  .rev-table col.c-hako   { width:30px; }
+  .rev-table col.c-suryou { width:50px; }
+  .rev-table col.c-del    { width:24px; }
+  .rev-table th { text-align:right; color:var(--sub); font-size:11px; padding:6px 2px; border-bottom:1px solid var(--line); }
+  .rev-table th:first-child, .rev-table td:first-child { text-align:left; }
+  .rev-table td { padding:9px 2px; border-bottom:1px solid var(--line); text-align:right; vertical-align:middle; overflow:hidden; }
+  .rev-table td:first-child { font-weight:700; }
+  .rev-table .hinban-name { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rev-table td.hako { font-weight:900; color:var(--accent); font-size:14px; }
+  .rev-table td.suryou { font-weight:900; color:var(--ok); font-size:15px; }
+  .rev-tags { margin-top:3px; white-space:nowrap; }
+  .rev-tag { display:inline-block; font-size:11px; font-weight:600; color:var(--sub); background:rgba(0,0,0,.04);
+             border-radius:8px; padding:2px 6px; margin-right:4px; cursor:pointer; }
+  .rev-tag.empty { color:var(--sub); opacity:.55; }
+  .rev-tag:active { background:rgba(0,0,0,.08); }
+  .rev-del { display:inline-block; width:20px; height:20px; line-height:18px; text-align:center;
+             border:1px solid var(--bad); color:var(--bad); border-radius:50%; cursor:pointer; font-weight:800; font-size:12px; }
+  .rev-del:active { background:var(--bad); color:#fff; }
+
+  .nyuka-display {
+    display:flex; justify-content:space-between; align-items:center;
+    background:var(--bg); border:2px solid var(--accent); border-radius:10px;
+    padding:13px 14px; cursor:pointer; min-height:52px;
+  }
+  .nyuka-display:active { background:rgba(37,99,235,.08); }
+  .nyuka-val { font-size:22px; font-weight:800; color:var(--txt); }
+  .nyuka-val.empty { color:var(--sub); font-weight:400; font-size:16px; }
+  .nyuka-icon { font-size:16px; color:var(--accent); opacity:.7; }
+
+  .numpad { margin-top:10px; background:var(--bg); border:1px solid var(--line); border-radius:12px; padding:12px; }
+  .numpad-keys { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:10px; }
+  .numpad-key {
+    padding:18px 6px; font-size:24px; font-weight:800; border:none; border-radius:10px;
+    background:var(--card); color:var(--txt); cursor:pointer; flex:none;
+  }
+  .numpad-key:active { background:var(--accent); color:#fff; }
+  .numpad-key-wide { grid-column:span 2; }
+  .numpad-key-del { background:rgba(220,38,38,.12); color:var(--bad); }
+  .numpad-key-del:active { background:var(--bad); color:#fff; }
+  .numpad-confirm {
+    width:100%; padding:15px; font-size:17px; font-weight:800; background:var(--ok);
+    color:#fff; border:none; border-radius:10px; cursor:pointer;
+  }
+  .numpad-confirm:active { opacity:.8; }
+
+  .toggles { display:flex; gap:14px; margin:8px 0; font-size:13px; color:var(--sub); flex-wrap:wrap; }
+  .toggles label { display:flex; align-items:center; gap:6px; }
+  .toggles input { width:20px; height:20px; accent-color:var(--accent); }
+
+  #histList { padding-left:8px; padding-right:8px; }
+  .hist-row { padding:13px 4px; border-bottom:1px solid var(--line); cursor:pointer; }
+  .hist-row:last-child { border-bottom:none; }
+  .hist-row:active { background:rgba(0,0,0,.04); }
+  .hist-row-main { font-size:15px; font-weight:800; }
+  .hist-row-sub { font-size:12px; color:var(--sub); margin-top:2px; }
+
+  .sheet { position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:flex-end; z-index:50; }
+  .sheet.on { display:flex; }
+  .sheet .box { background:var(--card); border-radius:18px 18px 0 0; padding:18px; width:100%; }
+  .sheet h3 { font-size:16px; margin-bottom:10px; }
+
+  #err { color:var(--bad); font-size:13px; margin:6px 0; white-space:pre-wrap; }
+  #dbg { font-size:11px; color:var(--sub); margin-bottom:6px; word-break:break-all; }
+  .note { font-size:12px; color:var(--sub); margin-top:6px; }
+  .resume { background:rgba(180,83,9,.08); border:1px solid var(--warn); color:var(--warn);
+            border-radius:12px; padding:12px; margin-bottom:10px; font-size:14px; font-weight:700; }
+
+  #verFixed { position:fixed; bottom:4px; right:8px; font-size:10px; color:var(--sub); opacity:.55; z-index:9999; pointer-events:none; }
+  #netFixed { position:fixed; top:8px; right:8px; font-size:11px; padding:4px 10px; z-index:9999; pointer-events:none; }
+
+  .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:300; display:none; align-items:center; justify-content:center; padding:22px; }
+  .modal-overlay.on { display:flex; }
+  .modal-box { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:22px 20px; width:100%; max-width:340px; }
+  .modal-msg { font-size:15px; font-weight:700; line-height:1.7; white-space:pre-wrap; margin-bottom:18px; text-align:center; }
+  .modal-btns { display:flex; gap:10px; }
+  .modal-btns button { flex:1; }
+</style>
+</head>
+<body>
+<div id="verFixed">—</div>
+<div class="badge" id="netFixed">—</div>
+
+<!-- ========== 担当者選択（パスワード不要） ========== -->
+<div class="screen on" id="s-login">
+  <h1>QR入庫 <span style="font-size:11px;color:var(--sub);font-weight:400;" id="verTag">—</span></h1>
+  <div class="sub" id="netInfo">—</div>
+  <div id="resumeBox" class="resume" style="display:none;"></div>
+  <div class="card">
+    <label class="fld">担当者</label>
+    <select id="loginStaff"></select>
+    <button class="primary full" id="loginBtn" onclick="doLogin()">決定</button>
+    <div id="loginLoading" style="display:none;text-align:center;padding:10px 0 0;">
+      <span class="sub">🔄 品番マスタ読み込み中…しばらくお待ちください</span>
+    </div>
+    <div class="note">初回のみネット接続が必要です。以降はオフラインで読取できます。次回からは自動で記憶した担当者で始まります。</div>
+  </div>
+  <div style="text-align:center;margin-top:10px;">
+    <a href="javascript:void(0)" onclick="openRecoveryQr()" style="color:var(--sub);font-size:12px;">🔧 スキャナ復旧用QR</a>
+  </div>
+  <div id="err"></div>
+</div>
+
+<!-- ========== 起動中（担当者を記憶していて、最新マスタ取得を待っている間だけ表示） ========== -->
+<div class="screen" id="s-boot">
+  <div style="text-align:center;padding-top:45vh;color:var(--sub);font-size:15px;">起動中…</div>
+</div>
+
+<!-- ========== スキャン ========== -->
+<div class="screen" id="s-scan">
+  <div class="hd">
+    <span class="badge tap" id="scStaff" onclick="confirmSwitchStaff()">—</span>
+    <span class="badge" id="scMode">通常</span>
+    <span class="badge tap" onclick="openRecoveryQr()">🔧</span>
+  </div>
+  <div id="dbg">—</div>
+
+  <div class="camwrap">
+    <video id="v" playsinline autoplay muted></video>
+    <div class="flash" id="flash"></div>
+    <div class="guide"></div>
+  </div>
+
+  <div class="resultbox idle" id="resultBox">📷 かざしてください</div>
+  <div id="totalCount" style="font-size:22px;font-weight:700;color:var(--txt);text-align:center;margin:4px 0;">0枚</div>
+
+  <div class="row">
+    <button id="btnExtra" onclick="openExtra()" disabled>端数・破壊</button>
+    <button class="ghost" id="btnUndo" onclick="undoLast()" disabled>↩ 直前取消</button>
+  </div>
+  <div class="row">
+    <button class="ghost" id="btnTorch" onclick="toggleTorch()" disabled>🔦 ライト</button>
+    <button class="ghost" id="btnCamToggle" onclick="toggleCameraManual()">📷 カメラOFF</button>
+    <button class="ghost" onclick="openHistory()">📋 履歴</button>
+  </div>
+  <button class="ok full" onclick="goReview()">読取おわり・確認へ</button>
+
+  <div class="toggles">
+    <label><input type="checkbox" id="bypass"> マスタ照合OFF（緊急時）</label>
+    <label><input type="checkbox" id="beepOn" checked> 音</label>
+    <label><input type="checkbox" id="vibOn" checked> バイブ</label>
+  </div>
+
+  <div class="card" style="padding:10px;">
+    <table><tbody id="tally"></tbody></table>
+    <div id="rejBox" class="note" style="color:var(--bad);"></div>
+  </div>
+</div>
+
+<!-- ========== 読取履歴 ========== -->
+<div class="screen" id="s-history">
+  <h1>読取履歴</h1>
+  <div class="sub" id="histInfo">—</div>
+  <div class="card" id="histList"></div>
+  <button class="ghost full" id="histBackBtn" onclick="closeHistory()">← もどる</button>
+</div>
+
+<!-- ========== 確認 ========== -->
+<div class="screen" id="s-review">
+  <h1>確認</h1>
+  <div class="sub" id="revInfo">—</div>
+  <div class="rev-wrap">
+    <table class="rev-table">
+      <colgroup>
+        <col class="c-hinban"><col class="c-hako"><col class="c-suryou"><col class="c-del">
+      </colgroup>
+      <thead><tr><th>品番</th><th>箱数</th><th>数量</th><th></th></tr></thead>
+      <tbody id="revBody"></tbody>
+    </table>
+  </div>
+  <div class="note" style="margin-bottom:10px;">端数・破壊はタップで入力。「数量」＝ 箱数×収容数＋端数（収容数はQRから自動取得・要確認）。</div>
+  <button class="ok full" id="sendBtn" onclick="doSend()">送信（ネット必要）</button>
+  <button class="ghost full" onclick="show('s-scan'); resumeCamera();">← 読取にもどる</button>
+  <div id="err2" style="color:var(--bad);font-size:13px;margin-top:6px;white-space:pre-wrap;"></div>
+</div>
+
+<!-- ========== 完了 ========== -->
+<div class="screen" id="s-done">
+  <h1 id="doneTitle">送信完了</h1>
+  <div class="card">
+    <div id="doneBody" style="font-size:15px;line-height:1.7;"></div>
+    <button class="primary full" onclick="continueScan()">続けて読取</button>
+  </div>
+</div>
+
+<!-- ========== 端数/破壊 パネル ========== -->
+<div class="sheet" id="extraSheet">
+  <div class="box">
+    <h3 id="extraTitle">端数・破壊</h3>
+    <label class="fld">対象品番</label>
+    <select id="extraHinban"></select>
+    <label class="fld">端数（最後の半端箱の入数。無ければ空）</label>
+    <div class="nyuka-display" onclick="openExtraNumpad('hasuu')">
+      <span id="extraHasuuDisp" class="nyuka-val empty">—</span><span class="nyuka-icon">⌨</span>
+    </div>
+    <input type="hidden" id="extraHasuu">
+    <label class="fld">破壊数（無ければ空 or 0）</label>
+    <div class="nyuka-display" onclick="openExtraNumpad('hakai')">
+      <span id="extraHakaiDisp" class="nyuka-val empty">—</span><span class="nyuka-icon">⌨</span>
+    </div>
+    <input type="hidden" id="extraHakai">
+    <div class="row" style="margin-top:12px;">
+      <button class="ghost" onclick="clearExtra()">クリア</button>
+      <button class="primary" onclick="saveExtra()">保存</button>
+    </div>
+    <button class="ghost full" onclick="closeExtra()">閉じる</button>
+  </div>
+</div>
+
+<!-- ========== 数値入力テンキー ========== -->
+<div class="sheet" id="numpadSheet">
+  <div class="box">
+    <h3 id="numpadTitle">入力</h3>
+    <div class="nyuka-display" style="pointer-events:none; margin-bottom:10px;">
+      <span id="numpadDisp" class="nyuka-val empty">—</span>
+    </div>
+    <div class="numpad">
+      <div class="numpad-keys">
+        <button type="button" class="numpad-key" onclick="numpadPress('7')">7</button>
+        <button type="button" class="numpad-key" onclick="numpadPress('8')">8</button>
+        <button type="button" class="numpad-key" onclick="numpadPress('9')">9</button>
+        <button type="button" class="numpad-key" onclick="numpadPress('4')">4</button>
+        <button type="button" class="numpad-key" onclick="numpadPress('5')">5</button>
+        <button type="button" class="numpad-key" onclick="numpadPress('6')">6</button>
+        <button type="button" class="numpad-key" onclick="numpadPress('1')">1</button>
+        <button type="button" class="numpad-key" onclick="numpadPress('2')">2</button>
+        <button type="button" class="numpad-key" onclick="numpadPress('3')">3</button>
+        <button type="button" class="numpad-key numpad-key-wide" onclick="numpadPress('0')">0</button>
+        <button type="button" class="numpad-key numpad-key-del" onclick="numpadPress('del')">⌫</button>
+      </div>
+      <button type="button" class="numpad-confirm" onclick="numpadConfirm()">✔ 確定</button>
+    </div>
+    <button class="ghost full" onclick="numpadCancel()">キャンセル</button>
+  </div>
+</div>
+
+<!-- ========== 確認/通知ダイアログ ========== -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-box">
+    <div class="modal-msg" id="modalMsg"></div>
+    <div class="modal-btns" id="modalBtns"></div>
+  </div>
+</div>
+
+<!-- スキャナのBluetoothモードが崩れた時の復旧用QR（受入QRスキャンと同じ画像・同じ機種のスキャナを使う想定）。 -->
+<div class="modal-overlay" id="recoveryQrOverlay" onclick="closeRecoveryQr()">
+  <div class="modal-box" style="text-align:center;" onclick="event.stopPropagation()">
+    <div class="modal-msg" style="margin-bottom:10px;">これをスキャナに読ませてください</div>
+    <img src="data:image/png;base64,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" style="width:100%;max-width:280px;" />
+    <button class="ghost full" style="margin-top:14px;" onclick="closeRecoveryQr()">閉じる</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script>
+/* ================= 設定 ================= */
+const APP_VERSION = 'v1.00';   // 更新のたびにここを上げる
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbwbBkUT4wBj3-KzIlqrv2IPckprlcryrK-Jom4xcwcyVyK4LzQT2DJ0v8se-p1Bq58pDQ/exec';
+
+const QR_MIN = 63, QR_MAX = 350;
+const FLOOR_MS = 350;
+const CLEAR_FRAMES = 3;
+const LOOP_MIN_MS = 90;
+const REFOCUS_EVERY_FRAMES = 6;
+
+// 紙のQRでモードを切り替える特殊コード（karaburi由来。同じ紙をそのまま使う想定なので文言は変えていない）。
+// kaizyo   = 通常モードに戻す
+// karaburi = 空箱モード（マスタ照合・重複チェックを一時的にスキップする）
+// hamidasi = はみ出しモード（空箱モード中でも、重複チェック・記録は必ず通常通り行う＝karaburi v55の修正と同じ考え方）
+const MODE_CODES = ['kaizyo', 'karaburi', 'hamidasi'];
+const MODE_LABEL = { normal:'通常', karaburi:'空箱', hamidasi:'はみ出し' };
+
+const K_AUTH = 'nyu_auth', K_PENDING = 'nyu_pending', K_HIST = 'nyu_history', K_DEV = 'nyu_device';
+const K_CAMOFF = 'nyu_cam_off';
+
+/* ================= localStorage ================= */
+function lget(k, d){ try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch(e){ return d; } }
+function lset(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+function ldel(k){ try { localStorage.removeItem(k); } catch(e){} }
+
+function deviceId(){
+  let d = lget(K_DEV, null);
+  if (!d){ d = Math.random().toString(36).slice(2,8); lset(K_DEV, d); }
+  return d;
+}
+
+/* ================= 状態 ================= */
+let auth = lget(K_AUTH, null);            // {staff,hinbanReady,hinban:[],staffList:[],ts}
+let pending = lget(K_PENDING, null);      // {staff, scans:[{ts,qr,hinban,mode}], extra:{hinban:{hasuu,hakai}}}
+let hinbanSet = null;
+let qrSeen = new Set();                   // このpending内で既に受理した生QR（2度読み検知用）
+let scanSeq = 0;
+let currentMode = 'normal';                // 'normal' | 'karaburi' | 'hamidasi'（紙のモードQRで切り替わる）
+
+function rebuildQrSeen(){
+  qrSeen = new Set((pending && pending.scans ? pending.scans : []).map(s => s.qr));
+}
+
+/* ================= 画面遷移 ================= */
+function show(id){
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('on'));
+  document.getElementById(id).classList.add('on');
+  window.scrollTo(0,0);
+}
+
+/* ================= ネット表示 ================= */
+function isOnline(){
+  return (typeof window.__nativeOnline === 'boolean') ? window.__nativeOnline : navigator.onLine;
+}
+function onNativeOnlineChange(on){ netBadge(); }
+function netBadge(){
+  const on = isOnline();
+  const t = on ? 'オンライン' : 'オフライン';
+  const el = document.getElementById('netInfo'); if (el) el.textContent = '状態: ' + t;
+  const f = document.getElementById('netFixed');
+  if (f){ f.textContent = (on ? '📶 ' : '📵 ') + t; f.className = 'badge' + (on ? '' : ' off'); }
+}
+window.addEventListener('online', netBadge);
+window.addEventListener('offline', netBadge);
+
+/* ================= 起動 ================= */
+window.addEventListener('load', () => {
+  document.getElementById('verTag').textContent = APP_VERSION;
+  document.getElementById('verFixed').textContent = APP_VERSION;
+  netBadge();
+
+  // 担当者候補はマスタ取得に成功した時のstaffListで更新する。初回（マスタ未取得）は空のまま、
+  // オンラインでの最初のログインでGASから取得する。
+  const sel = document.getElementById('loginStaff');
+  const cachedStaffList = (auth && auth.staffList && auth.staffList.length) ? auth.staffList : [];
+  sel.innerHTML = '<option value="">選択してください</option>' + cachedStaffList.map(s => '<option>'+esc(s)+'</option>').join('');
+  if (!cachedStaffList.length) fetchStaffListForLogin();
+
+  pending = lget(K_PENDING, null);
+
+  // 担当者を記憶していれば、確認画面を出さず自動でスキャン画面へ進む。
+  // ただし品番マスタは古い可能性があるので、オンラインなら最新を取ってから進む
+  // （オフラインなら待たずに今あるキャッシュで即進む）。
+  if (auth){
+    setAuthSets();
+    show('s-boot');
+    if (isOnline()){
+      loadWithFreshAuthThenEnter();
+    } else {
+      enterScanScreen();
+    }
+  } else {
+    renderResumeBoxOnLogin();
+  }
+});
+
+// ログイン画面（担当者未選択の状態）で、選択肢を表示するためだけにマスタ一覧を軽く取りに行く。
+// 失敗しても致命的ではない（担当者が選べないだけなので、オンラインになってから再試行させる）。
+function fetchStaffListForLogin(){
+  fetch(GAS_URL + '?action=login&staff=', { method:'GET' })
+    .then(r => r.json())
+    .then(res => {
+      if (res && res.staffList && res.staffList.length){
+        const sel = document.getElementById('loginStaff');
+        sel.innerHTML = '<option value="">選択してください</option>' + res.staffList.map(s => '<option>'+esc(s)+'</option>').join('');
+      }
+    })
+    .catch(()=>{});
+}
+
+function loadWithFreshAuthThenEnter(){
+  let fetched = false;
+  const req = fetch(GAS_URL, { method:'POST', headers:{'Content-Type':'text/plain'},
+                   body: JSON.stringify({ action:'login', staff: auth.staff }) })
+    .then(r => r.json())
+    .then(res => {
+      if (res && res.ok){
+        auth = { staff: res.staff, hinbanReady: !!res.hinbanReady, hinban: res.hinban || [], staffList: res.staffList || [], ts: Date.now() };
+        lset(K_AUTH, auth);
+        setAuthSets();
+        fetched = true;
+      }
+    })
+    .catch(()=>{ /* GASに届かなかった：何もしない。今のキャッシュのまま */ });
+  const timeout = new Promise(resolve => setTimeout(resolve, 30000));
+  Promise.race([req, timeout]).then(() => {
+    enterScanScreen();
+  });
+}
+
+function renderResumeBoxOnLogin(){
+  const rb = document.getElementById('resumeBox');
+  if (pending && pending.scans && pending.scans.length){
+    rb.style.display = 'block';
+    rb.innerHTML = '担当者「' + esc(pending.staff || '不明') + '」の未送信データ ' + pending.scans.length + '枚があります。'
+      + '<br>その担当者で選び直してから送信してください。'
+      + '<br><button class="ghost full" onclick="discardPending()">このデータを破棄する</button>';
+    if (pending.staff) document.getElementById('loginStaff').value = pending.staff;
+  } else {
+    rb.style.display = 'none';
+  }
+}
+
+function setAuthSets(){
+  hinbanSet = (auth && auth.hinbanReady) ? new Set((auth.hinban || []).map(x=>String(x).trim())) : null;
+}
+
+function discardPending(){
+  showConfirm('未送信データを破棄します。よろしいですか？', function(){
+    ldel(K_PENDING); pending = null; qrSeen = new Set();
+    const rb = document.getElementById('resumeBox'); if (rb) rb.style.display = 'none';
+  });
+}
+
+/* ================= ログイン（担当者選択） ================= */
+function doLogin(){
+  const staff = document.getElementById('loginStaff').value.trim();
+  const err = document.getElementById('err');
+  err.textContent = '';
+  if (!staff){ err.textContent = '担当者を選択してください'; return; }
+
+  const btn = document.getElementById('loginBtn');
+  const loading = document.getElementById('loginLoading');
+  btn.disabled = true; btn.textContent = '処理中...';
+  loading.style.display = 'block';
+
+  function finishLoading(){ btn.disabled = false; btn.textContent = '決定'; loading.style.display = 'none'; }
+
+  fetch(GAS_URL, { method:'POST', headers:{'Content-Type':'text/plain'},
+                   body: JSON.stringify({ action:'login', staff: staff }) })
+    .then(r => r.json()).then(res => {
+    finishLoading();
+    if (!res.ok){ err.textContent = res.message || '選択失敗'; return; }
+    auth = { staff: res.staff, hinbanReady: !!res.hinbanReady, hinban: res.hinban || [], staffList: res.staffList || [], ts: Date.now() };
+    lset(K_AUTH, auth);
+    setAuthSets();
+    enterScanScreen();
+  }).catch(e => {
+    finishLoading();
+    if (auth && auth.staff === staff){
+      setAuthSets();
+      enterScanScreen();
+    } else {
+      err.textContent = 'ネットに繋がりません。初回はオンラインで行ってください。';
+    }
+  });
+}
+
+function logout(){
+  stopCamera();
+  ldel(K_AUTH);
+  // pending は消さない（未送信が残っていれば次回復帰）
+  auth = null;
+  show('s-login');
+  location.reload();
+}
+// スキャン画面の担当者バッジから：担当者を選び直す。読取中データは保持される。
+function confirmSwitchStaff(){
+  showConfirm('担当者選択に戻ります。\n読取中のデータは保持されます。よろしいですか？', logout);
+}
+
+/* ================= スキャン開始（日付選択なし・当日固定） ================= */
+function enterScanScreen(){
+  const hasPending = pending && pending.scans && pending.scans.length;
+  if (hasPending && pending.staff !== auth.staff){
+    // 別担当者の未送信データが残っている場合は、そのまま引き継がず担当者選択に留める。
+    showAlert('別の担当者「' + pending.staff + '」の未送信データ（' + pending.scans.length + '枚）が残っています。\nその担当者を選び直して送信するか、破棄してください。', function(){
+      logout();
+    });
+    return;
+  }
+  if (!pending || pending.staff !== auth.staff){
+    pending = { staff: auth.staff, scans: [], extra: {} };
+    lset(K_PENDING, pending);
+  }
+  rebuildQrSeen();
+  currentMode = 'normal';
+  updateModeBadge();
+  updateScanHeader();
+  netBadge();
+  renderTally();
+  show('s-scan');
+  startCamera();
+}
+function updateScanHeader(){
+  const staff = (pending && pending.staff) || (auth && auth.staff) || '—';
+  document.getElementById('scStaff').textContent = staff + ' ▾';
+}
+function updateModeBadge(){
+  const el = document.getElementById('scMode');
+  el.textContent = MODE_LABEL[currentMode] || '通常';
+  el.className = 'badge' + (currentMode === 'karaburi' ? ' mode-karaburi' : currentMode === 'hamidasi' ? ' mode-hamidasi' : '');
+}
+function continueScan(){ ldel(K_PENDING); pending = null; enterScanScreen(); }
+
+/* ================= カメラ / デコード（受入QRスキャンと同じ仕組みをそのまま使用） ================= */
+const NATIVE = !!(window.AndroidBridge);
+let stream=null, track=null, video=document.getElementById('v');
+let cv=document.createElement('canvas'), cx=cv.getContext('2d',{willReadFrequently:true});
+let running=false, paused=false, torchOn=false;
+let armed=true, emptyStreak=0, acceptedRaw='', lastAcceptTs=0, lastLoopTs=0;
+let dbgFrame='—', dbgLast='—', dbgErr='—', isoInfo='—';
+
+function nativeRearm(){ armed = true; }
+
+function reportCamRect(){
+  if (!NATIVE) return;
+  const el = document.querySelector('.camwrap');
+  if (!el) return;
+  const r = el.getBoundingClientRect();
+  if (r.width <= 0 || r.height <= 0) return;
+  window.AndroidBridge.setCamRect(r.left, r.top, r.width, r.height, window.devicePixelRatio || 1);
+}
+window.addEventListener('resize', reportCamRect);
+window.addEventListener('orientationchange', function(){ setTimeout(reportCamRect, 250); });
+window.addEventListener('scroll', reportCamRect, { passive:true });
+
+function computeCamVisible(){
+  if (!NATIVE) return false;
+  const scanScreen = document.getElementById('s-scan');
+  if (!scanScreen || !scanScreen.classList.contains('on')) return false;
+  const blockerIds = ['modalOverlay', 'extraSheet', 'numpadSheet'];
+  for (const id of blockerIds){
+    const el = document.getElementById(id);
+    if (el && el.classList.contains('on')) return false;
+  }
+  return true;
+}
+let lastCamVisible = null;
+function syncCamVisible(){
+  if (!NATIVE) return;
+  const visible = computeCamVisible();
+  if (visible === lastCamVisible) return;
+  lastCamVisible = visible;
+  window.AndroidBridge.setCameraVisible(visible);
+  if (visible) reportCamRect();
+}
+if (NATIVE){
+  new MutationObserver(syncCamVisible).observe(document.body, { attributes:true, attributeFilter:['class'], subtree:true });
+}
+
+let cameraManuallyOff = (lget(K_CAMOFF, false) === true);
+function cameraAllowed(){ return !cameraManuallyOff; }
+function updateCamToggleBtn(){
+  const btn = document.getElementById('btnCamToggle');
+  if (!btn) return;
+  btn.textContent = cameraManuallyOff ? '📷 カメラON' : '📷 カメラOFF';
+}
+function toggleCameraManual(){
+  cameraManuallyOff = !cameraManuallyOff;
+  lset(K_CAMOFF, cameraManuallyOff);
+  updateCamToggleBtn();
+  reapplyCameraState();
+}
+function setCameraDefaultFromScanner(connected){
+  cameraManuallyOff = !!connected;
+  lset(K_CAMOFF, cameraManuallyOff);
+  updateCamToggleBtn();
+  reapplyCameraState();
+}
+updateCamToggleBtn();
+function reapplyCameraState(){
+  const onScanScreen = document.getElementById('s-scan').classList.contains('on');
+  if (!onScanScreen) return;
+  if (cameraAllowed()){
+    if (!running) startCamera();
+  } else {
+    if (running) stopCamera();
+    showResult('idle', '📡 スキャナで読み取ってください');
+    document.getElementById('dbg').textContent = 'カメラ無効（スキャナ使用中）';
+  }
+}
+function startCamera(){
+  if (!cameraAllowed()){
+    running = false;
+    showResult('idle', '📡 スキャナで読み取ってください');
+    document.getElementById('dbg').textContent = 'カメラ無効（スキャナ使用中）';
+    return;
+  }
+  if (NATIVE){
+    document.querySelector('.camwrap').classList.add('native-cam');
+    document.getElementById('dbg').textContent = 'ネイティブカメラ（CameraX + ML Kit）';
+    armed=true; emptyStreak=0; acceptedRaw=''; paused=false;
+    running=true;
+    showResult('idle', '📷 かざしてください');
+    requestAnimationFrame(()=>requestAnimationFrame(function(){
+      reportCamRect();
+      window.AndroidBridge.startCamera();
+    }));
+    return;
+  }
+  startCameraWeb();
+}
+async function startCameraWeb(){
+  running=false; stopCamera();
+  document.getElementById('err') && (document.getElementById('err').textContent='');
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720} }, audio:false
+    });
+  } catch(e){
+    showAlert('カメラ起動失敗: ' + e.name + ' / ' + e.message); return;
+  }
+  video.srcObject = stream; await video.play();
+  track = stream.getVideoTracks()[0];
+  try { await track.applyConstraints({ advanced:[{ focusMode:'continuous' }] }); } catch(e){}
+  let caps={}; try { caps = track.getCapabilities ? track.getCapabilities() : {}; } catch(e){}
+  document.getElementById('btnTorch').disabled = !caps.torch;
+  isoInfo = 'auto';
+
+  armed=true; emptyStreak=0; acceptedRaw=''; paused=false;
+  running=true; lastLoopTs=0;
+  try { if(!actx) actx = new (window.AudioContext||window.webkitAudioContext)(); actx.resume(); } catch(e){}
+  showResult('idle', '📷 かざしてください');
+  schedule();
+}
+function resumeCamera(){
+  renderTally();
+  refreshResultForLastHinban();
+  if (stream && !running){ running=true; schedule(); } else if (!stream){ startCamera(); }
+}
+let lastScannedHinban = null;
+function refreshResultForLastHinban(){
+  if (!lastScannedHinban || !pending || !pending.scans) return;
+  const arr = pending.scans.filter(s => s.hinban === lastScannedHinban);
+  if (!arr.length){ showResult('idle', '📷 かざしてください'); return; }
+  const ex = pending.extra[lastScannedHinban] || {};
+  const hasuuNow = ex.hasuu ? (parseInt(ex.hasuu, 10) || 0) : 0;
+  const hakoNow = hasuuNow > 0 ? (arr.length - 1) : arr.length;
+  const youbun = arr[0].youbun || 0;
+  const suryouNow = hakoNow * youbun + hasuuNow;
+  showResult('ok', '✅ 品番「' + esc(lastScannedHinban) + '」<br>この品番の累積 ' + arr.length + '枚（' + hakoNow + '箱 / ' + suryouNow + '個）');
+}
+function stopCamera(){
+  running=false;
+  if (NATIVE){ window.AndroidBridge.stopCamera(); return; }
+  if (stream){ stream.getVideoTracks().forEach(t=>t.stop()); stream=null; track=null; }
+}
+let focusPulseTimer = null;
+async function pulseFocus(){
+  if (NATIVE){ window.AndroidBridge.pulseFocus(); return; }
+  if (!track) return;
+  try {
+    await track.applyConstraints({ advanced:[{ focusMode:'single-shot' }] });
+    if (focusPulseTimer) clearTimeout(focusPulseTimer);
+    focusPulseTimer = setTimeout(() => {
+      track.applyConstraints({ advanced:[{ focusMode:'continuous' }] }).catch(()=>{});
+    }, 900);
+  } catch(e){}
+}
+document.querySelector('.camwrap').addEventListener('click', pulseFocus);
+function schedule(){
+  if (!running) return;
+  if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) video.requestVideoFrameCallback(loop);
+  else setTimeout(loop, LOOP_MIN_MS);
+}
+async function loop(){
+  if (!running) return;
+  if (paused){ schedule(); return; }
+  const now = performance.now();
+  if (now - lastLoopTs < LOOP_MIN_MS){ schedule(); return; }
+  lastLoopTs = now;
+  const vw=video.videoWidth, vh=video.videoHeight;
+  if (!vw || !vh){ schedule(); return; }
+  dbgFrame = vw+'x'+vh;
+
+  let raw=null;
+  if (cv.width !== vw){ cv.width=vw; cv.height=vh; }
+  cx.drawImage(video, 0, 0, vw, vh);
+
+  try {
+    if (typeof jsQR === 'function'){
+      const img = cx.getImageData(0,0,vw,vh);
+      const c = jsQR(img.data, vw, vh, { inversionAttempts:'attemptBoth' });
+      if (c && c.data) { raw = c.data; dbgErr='—'; }
+      else {
+        const enhanced = contrastStretch(img);
+        if (enhanced){
+          const c2 = jsQR(enhanced.data, vw, vh, { inversionAttempts:'attemptBoth' });
+          if (c2 && c2.data){ raw = c2.data; dbgErr='(コントラスト強調で復帰)'; }
+          else dbgErr='—';
+        } else dbgErr='—';
+      }
+    } else dbgErr='jsQR未ロード';
+  } catch(e){ dbgErr = (e.name||'')+' '+(e.message||''); }
+
+  if (raw != null){ dbgLast = raw.length; emptyStreak = 0; onDecode(raw); }
+  else {
+    emptyStreak++;
+    if (emptyStreak > 0 && emptyStreak % REFOCUS_EVERY_FRAMES === 0) pulseFocus();
+    if (!armed && emptyStreak >= CLEAR_FRAMES){ armed = true; }
+  }
+
+  document.getElementById('dbg').textContent = 'jsQR / ' + dbgFrame + ' / QR長 ' + dbgLast + ' / ' + dbgErr + ' / ' + isoInfo;
+  schedule();
+}
+function showResult(kind, msg){
+  const el = document.getElementById('resultBox');
+  el.className = 'resultbox ' + kind;
+  el.innerHTML = msg;
+}
+function contrastStretch(imgData){
+  const d = imgData.data;
+  let min = 255, max = 0;
+  for (let i = 0; i < d.length; i += 20){
+    const lum = d[i]*0.299 + d[i+1]*0.587 + d[i+2]*0.114;
+    if (lum < min) min = lum;
+    if (lum > max) max = lum;
+  }
+  const range = max - min;
+  if (range < 10) return null;
+  const out = new Uint8ClampedArray(d.length);
+  for (let i = 0; i < d.length; i += 4){
+    const lum = d[i]*0.299 + d[i+1]*0.587 + d[i+2]*0.114;
+    const v = Math.max(0, Math.min(255, ((lum - min) / range) * 255));
+    out[i] = out[i+1] = out[i+2] = v;
+    out[i+3] = 255;
+  }
+  return new ImageData(out, imgData.width, imgData.height);
+}
+
+/* ================= 読取判定 ================= */
+// ① モードQR（紙。karaburi/hamidasi/kaizyo）の判定を最初に行う → ②通常QRの形式チェック →
+// ③2度読み（karaburiモード中はスキップ。ただしhamidasiモード中は必ずチェックする＝karaburi v55と同じ考え方）→
+// ④品番マスタ不一致（同じくkaraburiモード中はスキップ、hamidasiモード中は必ずチェック）
+let rejCounts = { format:0, dup:0, master:0 };
+const REJ_LABEL = { format:'NG', dup:'重複', master:'マスタ外' };
+
+function scanInputAllowed(){
+  if (!document.getElementById('s-scan').classList.contains('on')) return false;
+  const blockerIds = ['modalOverlay', 'extraSheet', 'numpadSheet', 'recoveryQrOverlay'];
+  for (const id of blockerIds){
+    const el = document.getElementById(id);
+    if (el && el.classList.contains('on')) return false;
+  }
+  return true;
+}
+
+function onDecode(raw){
+  if (!scanInputAllowed()) return;
+  const now = performance.now();
+  if (now - lastAcceptTs < FLOOR_MS) return;
+  if (!armed){
+    if (raw !== acceptedRaw) armed = true;
+    else return;
+  }
+
+  const trimmed = raw.trim();
+  lastAcceptTs = now;
+  acceptedRaw = raw; armed = false;
+
+  // モード切替QR（紙）の判定。通常QR（20110607で始まる長い文字列）とは明確に違う短い文字列なので、
+  // ここで先に判定して品番としての処理には流さない。
+  if (MODE_CODES.indexOf(trimmed) !== -1){
+    handleModeQr(trimmed);
+    return;
+  }
+
+  const bypass = document.getElementById('bypass').checked || (currentMode === 'karaburi');
+
+  // ①フォーマット
+  const okFormat = raw.length >= QR_MIN && raw.length <= QR_MAX
+                && raw.slice(0,8) === '20110607' && raw.indexOf('000.0') !== -1;
+  if (!okFormat){
+    rejCounts.format++;
+    reject('format', '読取エラー：QRの形式が不正です。再スキャンしてください（長さ ' + raw.length + '）');
+    return;
+  }
+
+  // ②2度読み（karaburiモード中はスキップするが、hamidasiモードなら必ずチェックする）
+  const forceCheck = (currentMode === 'hamidasi');
+  if ((!bypass || forceCheck) && qrSeen.has(raw)){
+    rejCounts.dup++;
+    reject('dup', '重複エラー：この札は読み取り済みです。再スキャンしないでください');
+    return;
+  }
+
+  const hinban = raw.substring(38, 63).trim();
+
+  // ③品番マスタ不一致（同様にhamidasiモードなら必ずチェックする）
+  if ((!bypass || forceCheck) && hinbanSet && !hinbanSet.has(hinban)){
+    rejCounts.master++;
+    reject('master', '品番マスタ不一致：品番「' + (hinban || '(空)') + '」はマスタにありません。再スキャンして下さい');
+    return;
+  }
+
+  // 受理
+  const youbun = parseInt(raw.substring(85, 92).trim(), 10) || 0;
+  const d = new Date();
+  const ts = fmtDate(d) + ' ' + d.toTimeString().slice(0,8)
+           + '.' + String(d.getMilliseconds()).padStart(3,'0')
+           + '/' + deviceId() + '-' + (++scanSeq);
+  pending.scans.push({ ts: ts, qr: raw, hinban: hinban, youbun: youbun, mode: currentMode });
+  qrSeen.add(raw);
+  lset(K_PENDING, pending);
+  flash('ok', 'OK');
+
+  lastScannedHinban = hinban;
+  refreshResultForLastHinban();
+
+  if (document.getElementById('beepOn').checked) beep(1250, .28);
+  if (document.getElementById('vibOn').checked && navigator.vibrate) navigator.vibrate(350);
+  renderTally();
+}
+// モードQR（紙）を読んだ時の処理。通常の読取カウントには含めない（品番を持たないため）。
+function handleModeQr(code){
+  if (code === 'kaizyo') currentMode = 'normal';
+  else if (code === 'karaburi') currentMode = 'karaburi';
+  else if (code === 'hamidasi') currentMode = 'hamidasi';
+  updateModeBadge();
+  flash('ok', MODE_LABEL[currentMode]);
+  showResult('ok', '🔀 モードを「' + esc(MODE_LABEL[currentMode]) + '」に切り替えました');
+  if (document.getElementById('vibOn').checked && navigator.vibrate) navigator.vibrate(500);
+}
+function fmtDate(d){
+  return d.getFullYear() + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + String(d.getDate()).padStart(2,'0');
+}
+function reject(kind, msg){
+  flash('bad', REJ_LABEL[kind] || '×');
+  showResult('bad', '❌ ' + esc(msg));
+  if (document.getElementById('beepOn').checked) beep(320, .35);
+  if (document.getElementById('vibOn').checked && navigator.vibrate) navigator.vibrate([220,120,220,120,220]);
+  const box = document.getElementById('rejBox');
+  box.textContent = '弾いた累計：重複 ' + rejCounts.dup + ' / マスタ外 ' + rejCounts.master + ' / 形式 ' + rejCounts.format;
+}
+
+/* ================= 取消 ================= */
+function undoLast(){
+  if (!pending || !pending.scans.length) return;
+  const last = pending.scans[pending.scans.length - 1];
+  showConfirm('直前の読取を取り消します。\n品番: ' + last.hinban + '\nよろしいですか？', function(){
+    pending.scans.pop();
+    qrSeen.delete(last.qr);
+    const stillHas = pending.scans.some(s => s.hinban === last.hinban);
+    if (!stillHas) delete pending.extra[last.hinban];
+    lset(K_PENDING, pending);
+    renderTally();
+    refreshResultForLastHinban();
+  });
+}
+function updateUndoBtn(){
+  const btn = document.getElementById('btnUndo');
+  const has = !!(pending && pending.scans && pending.scans.length);
+  btn.disabled = !has;
+  document.getElementById('btnExtra').disabled = !has;
+}
+
+/* ================= タリー ================= */
+function tallyMap(){
+  const m = {};
+  pending.scans.forEach(s => { m[s.hinban] = (m[s.hinban]||0) + 1; });
+  return m;
+}
+function renderTally(){
+  const items = reviewItems();
+  const tb = document.getElementById('tally');
+  tb.innerHTML = items.map(it => {
+    const tag = [];
+    if (it.hasuu) tag.push('端数' + it.hasuu);
+    if (it.hakai) tag.push('破壊' + it.hakai);
+    return '<tr>'
+      + '<td>' + esc(it.hinban) + (tag.length ? ' <span style="color:var(--warn);font-size:12px;">'+tag.join(' ')+'</span>' : '') + '</td>'
+      + '<td class="num">' + it.hako + '箱</td>'
+      + '<td class="num">' + it.suryou + '個</td></tr>';
+  }).join('');
+  document.getElementById('totalCount').textContent = (pending && pending.scans ? pending.scans.length : 0) + '枚';
+  updateUndoBtn();
+}
+
+/* ================= 端数/破壊 ================= */
+function openExtra(hinban){
+  const m = tallyMap();
+  const keys = Object.keys(m).sort();
+  if (!keys.length){ return; }
+  const sel = document.getElementById('extraHinban');
+  sel.innerHTML = keys.map(k => '<option'+((hinban && k===hinban)?' selected':'')+'>'+esc(k)+'</option>').join('');
+  if (!hinban){
+    const last = pending.scans[pending.scans.length-1];
+    if (last) sel.value = last.hinban;
+  }
+  loadExtraInputs();
+  document.getElementById('extraSheet').classList.add('on');
+}
+function loadExtraInputs(){
+  const h = document.getElementById('extraHinban').value;
+  const ex = pending.extra[h] || {};
+  document.getElementById('extraHasuu').value = (ex.hasuu != null ? ex.hasuu : '');
+  document.getElementById('extraHakai').value = (ex.hakai != null ? ex.hakai : '');
+  updateExtraDisplays();
+}
+document.getElementById('extraHinban').addEventListener('change', loadExtraInputs);
+function updateExtraDisplays(){
+  setNyukaDisp('extraHasuuDisp', document.getElementById('extraHasuu').value);
+  setNyukaDisp('extraHakaiDisp', document.getElementById('extraHakai').value);
+}
+function setNyukaDisp(id, val){
+  const el = document.getElementById(id);
+  if (val === '' || val == null){ el.textContent = '—'; el.classList.add('empty'); }
+  else { el.textContent = val; el.classList.remove('empty'); }
+}
+function openExtraNumpad(which){
+  const inputId = which === 'hasuu' ? 'extraHasuu' : 'extraHakai';
+  const label   = which === 'hasuu' ? '端数（半端箱の入数）' : '破壊数';
+  const cur = document.getElementById(inputId).value;
+  openNumpad(label, cur, function(v){
+    document.getElementById(inputId).value = (v === '' ? '' : v);
+    updateExtraDisplays();
+  });
+}
+function saveExtra(){
+  const h = document.getElementById('extraHinban').value;
+  const hs = document.getElementById('extraHasuu').value;
+  const hk = document.getElementById('extraHakai').value;
+  const o = {};
+  if (hs !== '') o.hasuu = String(parseInt(hs,10) || 0);
+  if (hk !== '') o.hakai = String(parseInt(hk,10) || 0);
+  if (Object.keys(o).length) pending.extra[h] = o; else delete pending.extra[h];
+  lset(K_PENDING, pending);
+  renderTally();
+  if (h === lastScannedHinban) refreshResultForLastHinban();
+  closeExtra();
+}
+function clearExtra(){
+  const h = document.getElementById('extraHinban').value;
+  const ex = pending.extra[h];
+  if (!ex || (!ex.hasuu && !ex.hakai)) return;
+  showConfirm('品番「' + h + '」の端数・破壊の入力をクリアします。\nよろしいですか？', function () {
+    delete pending.extra[h];
+    lset(K_PENDING, pending);
+    document.getElementById('extraHasuu').value = '';
+    document.getElementById('extraHakai').value = '';
+    updateExtraDisplays();
+    renderTally();
+    if (h === lastScannedHinban) refreshResultForLastHinban();
+  });
+}
+function closeExtra(){ document.getElementById('extraSheet').classList.remove('on'); }
+
+/* ================= 共通テンキー ================= */
+let numpadBuf = '', numpadCallback = null;
+function openNumpad(title, initial, cb){
+  document.getElementById('numpadTitle').textContent = title;
+  numpadBuf = (initial != null && initial !== '') ? String(initial) : '';
+  numpadCallback = cb;
+  renderNumpadDisp();
+  document.getElementById('numpadSheet').classList.add('on');
+}
+function numpadPress(k){
+  if (k === 'del') numpadBuf = numpadBuf.slice(0, -1);
+  else numpadBuf = (numpadBuf === '0') ? k : numpadBuf + k;
+  renderNumpadDisp();
+}
+function renderNumpadDisp(){ setNyukaDisp('numpadDisp', numpadBuf); }
+function numpadConfirm(){
+  document.getElementById('numpadSheet').classList.remove('on');
+  const cb = numpadCallback; numpadCallback = null;
+  if (cb) cb(numpadBuf === '' ? '' : parseInt(numpadBuf, 10));
+}
+function numpadCancel(){
+  document.getElementById('numpadSheet').classList.remove('on');
+  numpadCallback = null;
+}
+
+/* ================= 確認/通知ダイアログ ================= */
+function showModal(msg, buttons){
+  document.getElementById('modalMsg').textContent = msg;
+  const area = document.getElementById('modalBtns');
+  area.innerHTML = '';
+  buttons.forEach(function (b) {
+    const el = document.createElement('button');
+    el.className = b.cls || 'ghost';
+    el.textContent = b.label;
+    el.onclick = function () { closeModal(); if (b.action) b.action(); };
+    area.appendChild(el);
+  });
+  document.getElementById('modalOverlay').classList.add('on');
+}
+function closeModal(){ document.getElementById('modalOverlay').classList.remove('on'); }
+function openRecoveryQr(){ document.getElementById('recoveryQrOverlay').classList.add('on'); }
+function closeRecoveryQr(){ document.getElementById('recoveryQrOverlay').classList.remove('on'); }
+function showAlert(msg, okCb){
+  showModal(msg, [{ label:'OK', cls:'primary', action: okCb }]);
+}
+function showConfirm(msg, yesCb, noCb){
+  showModal(msg, [
+    { label:'キャンセル', cls:'ghost', action: noCb },
+    { label:'OK', cls:'primary', action: yesCb }
+  ]);
+}
+
+/* ================= 確認 ================= */
+function goReview(){
+  if (!pending.scans.length){ showAlert('まだ1枚も読み取っていません'); return; }
+  running = false;
+  renderReview();
+  show('s-review');
+}
+function reviewItems(){
+  const byH = {};
+  pending.scans.forEach(s => { (byH[s.hinban] = byH[s.hinban] || []).push(s); });
+  return Object.keys(byH).sort().map(function (h) {
+    const arr = byH[h];
+    const mai = arr.length;
+    const ex = pending.extra[h] || {};
+    const hasuuNum = ex.hasuu ? (parseInt(ex.hasuu, 10) || 0) : 0;
+    const hako = hasuuNum > 0 ? (mai - 1) : mai;
+    const youbun = arr[0].youbun || 0;
+    const suryou = hako * youbun + hasuuNum;
+    return { hinban: h, mai: mai, hako: hako, youbun: youbun, suryou: suryou, hasuu: ex.hasuu || '', hakai: ex.hakai || '' };
+  });
+}
+function renderReview(){
+  document.getElementById('revInfo').textContent = pending.staff + '　合計 ' + pending.scans.length + '枚';
+  const tb = document.getElementById('revBody');
+  tb.innerHTML = reviewItems().map(function (it) {
+    const h = it.hinban;
+    const hAttr = esc(h);
+    return '<tr>'
+      + '<td>'
+        + '<div class="hinban-name">' + esc(h) + '</div>'
+        + '<div class="rev-tags">'
+          + '<span class="rev-tag numtap' + (it.hasuu===''?' empty':'') + '" data-h="' + hAttr + '" data-key="hasuu">端数' + (it.hasuu!==''?it.hasuu:'—') + '</span>'
+          + '<span class="rev-tag numtap' + (it.hakai===''?' empty':'') + '" data-h="' + hAttr + '" data-key="hakai">破壊' + (it.hakai!==''?it.hakai:'—') + '</span>'
+        + '</div>'
+      + '</td>'
+      + '<td class="hako">' + it.hako + '</td>'
+      + '<td class="suryou">' + it.suryou + '</td>'
+      + '<td><span class="rev-del" data-h="' + hAttr + '" title="この品番を削除">✕</span></td>'
+      + '</tr>';
+  }).join('');
+  tb.querySelectorAll('.numtap').forEach(function (el) {
+    el.addEventListener('click', function () {
+      const h = el.dataset.h, key = el.dataset.key;
+      const cur = (pending.extra[h] || {})[key] || '';
+      openNumpad(key === 'hasuu' ? '端数（半端箱の入数）' : '破壊数', cur, function (v) {
+        revEdit(h, key, v === '' ? '' : String(v));
+      });
+    });
+  });
+  tb.querySelectorAll('.rev-del').forEach(function (el) {
+    el.addEventListener('click', function () { deleteHinbanFromReview(el.dataset.h); });
+  });
+}
+function deleteHinbanFromReview(h){
+  const cnt = pending.scans.filter(s => s.hinban === h).length;
+  showConfirm('品番「' + h + '」を削除します（' + cnt + '枚ぶん）。\nよろしいですか？', function () {
+    pending.scans.filter(s => s.hinban === h).forEach(s => qrSeen.delete(s.qr));
+    pending.scans = pending.scans.filter(s => s.hinban !== h);
+    delete pending.extra[h];
+    lset(K_PENDING, pending);
+    if (!pending.scans.length) {
+      showAlert('全て削除しました。読取画面にもどります。', function () { show('s-scan'); resumeCamera(); });
+      return;
+    }
+    renderReview();
+  });
+}
+function revEdit(h, key, val){
+  val = String(val).trim();
+  const o = pending.extra[h] || {};
+  if (val === '') delete o[key]; else o[key] = String(parseInt(val,10) || 0);
+  if (Object.keys(o).length) pending.extra[h] = o; else delete pending.extra[h];
+  lset(K_PENDING, pending);
+  renderReview();
+}
+
+/* ================= 送信 ================= */
+function buildRows(){
+  const byH = {};
+  pending.scans.forEach(s => { (byH[s.hinban] = byH[s.hinban] || []).push(s); });
+  const rows = [];
+  Object.keys(byH).forEach(h => {
+    const arr = byH[h];
+    const ex = pending.extra[h] || {};
+    arr.forEach((s, i) => {
+      const isLast = (i === arr.length - 1);
+      rows.push({
+        ts: s.ts, qr: s.qr, hinban: h, mode: s.mode || 'normal',
+        hasuu: (isLast && ex.hasuu) ? ex.hasuu : '',
+        hakai: (isLast && ex.hakai) ? ex.hakai : ''
+      });
+    });
+  });
+  return rows;
+}
+function doSend(){
+  const btn = document.getElementById('sendBtn');
+  const err = document.getElementById('err2');
+  err.textContent = '';
+  if (!isOnline()){ err.textContent = 'オフラインです。ネットに繋いでから送信してください。（データは保持されています）'; return; }
+  if (pending.staff !== auth.staff){
+    err.textContent = 'このデータは担当者「' + pending.staff + '」のものです。一度その担当者を選び直してください。';
+    return;
+  }
+  btn.disabled = true; btn.textContent = '送信中...';
+  const payload = { staff: pending.staff, rows: buildRows() };
+  const itemsSnapshot = reviewItems();
+  fetch(GAS_URL, { method:'POST', headers:{'Content-Type':'text/plain'}, body: JSON.stringify(payload) })
+    .then(r => r.json()).then(res => {
+      btn.disabled = false; btn.textContent = '送信（ネット必要）';
+      if (!res.ok){ err.textContent = 'エラー: ' + (res.message || '不明'); return; }
+      const hist = lget(K_HIST, []);
+      hist.unshift({ sentAt: new Date().toISOString(), staff: payload.staff, rows: res.added, items: itemsSnapshot });
+      lset(K_HIST, hist.slice(0, 200));
+      ldel(K_PENDING); pending = null; qrSeen = new Set();
+      document.getElementById('doneTitle').textContent = '送信完了';
+      document.getElementById('doneBody').innerHTML =
+        payload.staff + '<br>追記 ' + res.added + ' 行';
+      stopCamera();
+      show('s-done');
+    })
+    .catch(e => {
+      btn.disabled = false; btn.textContent = '送信（ネット必要）';
+      err.textContent = '送信できませんでした（通信エラー）。データは保持されています。もう一度お試しください。\n' + e.message;
+    });
+}
+
+/* ================= 読取履歴（送信済み） ================= */
+let pausedBeforeHistory = false;
+let historyData = [];
+function openHistory(){
+  pausedBeforeHistory = paused;
+  paused = true;
+  renderHistoryList();
+  show('s-history');
+}
+function renderHistoryList(){
+  historyData = lget(K_HIST, []).filter(h => !auth || h.staff === auth.staff);
+  document.getElementById('histInfo').textContent = (auth ? auth.staff : '') + '　送信済み ' + historyData.length + '件（新しい順）';
+  const box = document.getElementById('histList');
+  if (!historyData.length){
+    box.innerHTML = '<div class="note">送信履歴がありません</div>';
+  } else {
+    box.innerHTML = historyData.map(function (h, i) {
+      const dtStr = new Date(h.sentAt).toLocaleString('ja-JP');
+      return '<div class="hist-row" data-i="' + i + '">'
+        + '<div class="hist-row-main">📤 送信 ' + dtStr + '</div>'
+        + '<div class="hist-row-sub">' + (h.rows||0) + '行</div>'
+        + '</div>';
+    }).join('');
+    box.querySelectorAll('.hist-row').forEach(function (el) {
+      el.addEventListener('click', function () { showHistoryDetail(parseInt(el.dataset.i, 10)); });
+    });
+  }
+  const btn = document.getElementById('histBackBtn');
+  btn.textContent = '← もどる';
+  btn.onclick = closeHistory;
+}
+function showHistoryDetail(i){
+  const h = historyData[i];
+  if (!h) return;
+  const dtStr = new Date(h.sentAt).toLocaleString('ja-JP');
+  document.getElementById('histInfo').textContent = '送信 ' + dtStr;
+  const rows = (h.items || []).map(function (it) {
+    const hasuu = (it.hasuu !== '' && it.hasuu != null) ? it.hasuu : '—';
+    const hakai = (it.hakai !== '' && it.hakai != null) ? it.hakai : '—';
+    return '<tr><td>'
+      + '<div class="hinban-name">' + esc(it.hinban) + '</div>'
+      + '<div class="rev-tags"><span class="rev-tag" style="cursor:default;">端数' + hasuu + '</span><span class="rev-tag" style="cursor:default;">破壊' + hakai + '</span></div>'
+      + '</td>'
+      + '<td class="hako">' + it.hako + '</td>'
+      + '<td class="suryou">' + it.suryou + '</td></tr>';
+  }).join('');
+  document.getElementById('histList').innerHTML =
+    '<div class="rev-wrap"><table class="rev-table"><colgroup><col class="c-hinban"><col class="c-hako"><col class="c-suryou"></colgroup>'
+    + '<thead><tr><th>品番</th><th>箱数</th><th>数量</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  const btn = document.getElementById('histBackBtn');
+  btn.textContent = '← 一覧にもどる';
+  btn.onclick = renderHistoryList;
+}
+function closeHistory(){
+  paused = pausedBeforeHistory;
+  updateScanHeader();
+  show('s-scan');
+}
+
+/* ================= ライト ================= */
+async function toggleTorch(){
+  if (NATIVE){
+    torchOn = window.AndroidBridge.toggleTorch();
+    document.getElementById('btnTorch').textContent = torchOn ? '🔦 ライト ON' : '🔦 ライト';
+    return;
+  }
+  if (!track) return;
+  const requestedOn = !torchOn;
+  try {
+    await track.applyConstraints({ advanced:[{ torch: requestedOn }] });
+    let actuallyOn = requestedOn;
+    try {
+      const s = track.getSettings ? track.getSettings() : {};
+      if (typeof s.torch === 'boolean') actuallyOn = s.torch;
+    } catch(e){}
+    torchOn = actuallyOn;
+    document.getElementById('btnTorch').textContent = torchOn ? '🔦 ライト ON' : '🔦 ライト';
+    if (requestedOn && !actuallyOn) {
+      showAlert('この端末はライトの制御に対応していない可能性があります。実際に点灯しているか確認してください。');
+    }
+  } catch(e){
+    torchOn = false;
+    document.getElementById('btnTorch').textContent = '🔦 ライト';
+    showAlert('この端末ではライトを操作できませんでした。');
+  }
+}
+
+/* ================= 音 ================= */
+let actx = null;
+function beep(freq, dur){
+  try {
+    if (!actx) actx = new (window.AudioContext||window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.connect(g); g.connect(actx.destination);
+    o.type = 'square'; o.frequency.value = freq;
+    g.gain.setValueAtTime(1, actx.currentTime);
+    g.gain.setValueAtTime(1, actx.currentTime + dur * .7);
+    g.gain.exponentialRampToValueAtTime(.001, actx.currentTime + dur);
+    o.start(); o.stop(actx.currentTime + dur);
+  } catch(e){}
+}
+function flash(cls, txt){
+  const f = document.getElementById('flash');
+  f.className = 'flash ' + cls; f.textContent = txt;
+  f.style.opacity = '.9';
+  setTimeout(()=>{ f.style.opacity = '0'; }, 130);
+}
+
+/* ================= misc ================= */
+function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+window.addEventListener('beforeunload', (e) => {
+  const p = lget(K_PENDING, null);
+  if (p && p.scans && p.scans.length){ e.preventDefault(); e.returnValue = ''; }
+});
+
+/* ================= 戻る操作でページを離脱させない ================= */
+function pushDummyHistory(){ try { history.pushState({ nyukoScan: true }, ''); } catch (e) {} }
+window.addEventListener('popstate', function () {
+  pushDummyHistory();
+  const hasUnsent = pending && pending.scans && pending.scans.length;
+  const onLogin = document.getElementById('s-login').classList.contains('on');
+  if (onLogin) return;
+  if (hasUnsent) {
+    showConfirm('未送信のデータ（' + pending.scans.length + '枚）があります。\n担当者選択に戻りますか？\n（データは保持されます）', logout);
+  }
+});
+pushDummyHistory();
+</script>
+</body>
+</html>

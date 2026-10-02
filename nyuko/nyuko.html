@@ -39,7 +39,7 @@
   button[disabled] { opacity:.4; }
   .full { width:100%; flex:none; margin-top:8px; }
 
-  .camwrap { position:relative; width:100%; aspect-ratio:1/1; background:#000; border-radius:14px; overflow:hidden; margin-bottom:8px; }
+  .camwrap { position:relative; width:100%; aspect-ratio:2.4/1; background:#000; border-radius:14px; overflow:hidden; margin-bottom:6px; }
   .camwrap.native-cam { background:transparent; }
   .camwrap.native-cam #v { display:none; }
   .guide { position:absolute; inset:12% ; border:3px solid rgba(255,255,255,.85); border-radius:12px;
@@ -193,15 +193,14 @@
     <span class="badge tap" onclick="lockScreen()">🔒ロック</span>
     <span class="badge tap" onclick="openRecoveryQr()">🔧</span>
   </div>
-  <div id="scModeBand" style="text-align:center; border-radius:12px; padding:8px 10px; margin-bottom:8px; font-weight:900; border:2px solid var(--line); background:var(--line); color:var(--txt);">
-    <div style="font-size:12px; font-weight:700; opacity:.85;">モード</div>
-    <div id="scMode" style="font-size:30px; line-height:1.2; word-break:break-all;">通常</div>
-    <div id="scModeSub" style="font-size:12px; font-weight:700;">マスタ→現品（2段階読取）</div>
+  <div id="scModeBand" style="text-align:center; border-radius:12px; padding:3px 10px 4px; margin-bottom:6px; font-weight:900; border:2px solid var(--line); background:var(--line); color:var(--txt);">
+    <div id="scMode" style="font-size:28px; line-height:1.15; word-break:break-all;">通常</div>
+    <div id="scModeSub" style="font-size:11px; font-weight:700; line-height:1.2;">マスタ→現品（2段階読取）</div>
   </div>
   <div id="scMaster" style="display:none; background:rgba(180,83,9,.12); border:2px solid var(--warn); color:var(--warn);
-       border-radius:12px; padding:8px 10px; margin-bottom:8px; text-align:center; font-weight:900; line-height:1.3;">
-    <div style="font-size:12px; font-weight:700;">📌 マスタ品番</div>
-    <div id="scMasterVal" style="font-size:30px; word-break:break-all;"></div>
+       border-radius:12px; padding:3px 10px; margin-bottom:6px; text-align:center; font-weight:900; line-height:1.2;">
+    <span style="font-size:12px; font-weight:700;">📌マスタ品番</span>
+    <div id="scMasterVal" style="font-size:24px; word-break:break-all;"></div>
   </div>
   <div id="dbg">—</div>
 
@@ -366,7 +365,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.20';   // 更新のたびにここを上げる
+const APP_VERSION = 'v1.25';   // 更新のたびにここを上げる
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbyMZEogfrGCsH-joO1oBN0GST7GA_3wUwYdJ1ciomnJQ7Nh8NBs9SiTkrCmcrsmdArkGQ/exec';
 
 const QR_MIN = 63, QR_MAX = 350;
@@ -971,6 +970,7 @@ function onDecode(raw){
     // マスタ未設定 → この1枚をマスタとして記憶し、比較用の次の1枚を待つ
     // マスタ読取は重複チェック（qrSeen）・読取枚数の対象にしない。送信ログ用にだけ別枠で記録する。
     pending.master = { type:'hinban', hinban: hinban, qr: raw };
+    pending.setId = (pending.setSeq = (pending.setSeq || 0) + 1); // 「マスタ＋現品」を1セットとして扱う（取消用）
     lset(K_PENDING, pending);
     syncModeFromMaster();
     flash('ok', 'マスタ');
@@ -998,11 +998,11 @@ function onDecode(raw){
            + '.' + String(d.getMilliseconds()).padStart(3,'0')
            + '/' + deviceId() + '-' + (++scanSeq);
   pushUndo_('scan');
-  pending.scans.push({ ts: ts, qr: raw, hinban: hinban, youbun: youbun, mode: currentMode,
+  pending.scans.push({ ts: ts, qr: raw, hinban: hinban, youbun: youbun, mode: currentMode, setId: pending.setId || null,
                        masterQr: area || (karaburi ? 'karaburi' : (hamidasi ? 'hamidasi' : (master ? master.qr : ''))), masterHinban: area || (karaburi ? 'karaburi' : (hamidasi ? 'hamidasi' : (master ? master.hinban : ''))), result: '一致' });
   // damu系・karaburiの間に受理した札は重複チェックの記録に入れない（解除後に同じ札を通常で読んでも止めない。aia仕様）
   if (!area && !karaburi) qrSeen.add(raw);
-  if (karaburi){ pending.master = null; pending.mode = 'normal'; } // カラブリは1枚受理したら通常に戻る（aia仕様）
+  if (karaburi){ pending.master = null; pending.mode = 'normal'; pending.setId = null; } // カラブリは1枚受理したら通常に戻る（aia仕様）
   // 通常の一致ではマスタをそのまま維持する → 同じマスタに対して続けて何枚でも現品を読める（aia仕様）
   lset(K_PENDING, pending);
   syncModeFromMaster();
@@ -1040,6 +1040,9 @@ function handleModeQr(code){
     pushUndo_('mode');
     pending.mode = (code === 'kaizyo') ? 'normal' : code;
     pending.master = null;
+    pending.setId = (code === 'kaizyo') ? null : (pending.setSeq = (pending.setSeq || 0) + 1); // 「特殊QR＋現品」を1セットとして扱う（取消用）
+    pending.undoStack[pending.undoStack.length - 1].setId = pending.setId;
+    pending.undoStack[pending.undoStack.length - 1].code = code;
     lset(K_PENDING, pending);
     syncModeFromMaster();
     updateUndoBtn();
@@ -1092,6 +1095,11 @@ function closeMismatchOverlay(){
 }
 
 /* ================= 取消 ================= */
+function undoModeLabel_(m){
+  if (!m || m === 'normal') return '通常';
+  if (MODE_GROUP_B.indexOf(m) !== -1) return '単独イベント（' + m + '）';
+  return MODE_LABEL[m] || m;
+}
 function undoLast(){
   if (!pending) return;
   const stack = (pending.undoStack = pending.undoStack || []);
@@ -1101,35 +1109,49 @@ function undoLast(){
   const fromStack = !!top;
   if (!top){
     if (!pending.scans.length) return;
-    top = { kind: 'scan', prevMode: pending.mode || 'normal', prevMaster: pending.master || null }; // 旧データ（履歴なし）の互換
+    top = { kind: 'scan', prevMaster: pending.master || null }; // 旧データ（履歴なし）の互換
   }
-  const restore = function(){
-    if (fromStack) stack.pop();
-    pending.mode = top.prevMode || 'normal';
-    pending.master = top.prevMaster || null;
-  };
 
   if (top.kind === 'mode'){
-    const from = MODE_LABEL[pending.mode] || pending.mode;
-    const to = MODE_LABEL[top.prevMode || 'normal'] || top.prevMode;
-    showConfirm('特殊QRの切替を取り消します。\nモード「' + from + '」→「' + to + '」に戻します。\nよろしいですか？', function(){
-      restore();
+    // 特殊QRの切替を取り消すと、必ず「通常」に戻る（マスタも未設定）
+    showConfirm('【特殊QRの切替】を取り消します。\n今のモード: ' + undoModeLabel_(pending.mode) + '\n取り消すと「通常」に戻ります。\nよろしいですか？', function(){
+      if (fromStack) stack.pop();
+      pending.mode = 'normal';
+      pending.master = null;
+      pending.setId = null;
       lset(K_PENDING, pending);
       syncModeFromMaster();
       updateUndoBtn();
-      showResult('ok', '↩ モードを「' + esc(to) + '」に戻しました');
+      showResult('ok', '↩ モードを「通常」に戻しました');
     });
     return;
   }
 
   const last = pending.scans[pending.scans.length - 1];
-  showConfirm('直前の読取を取り消します。\n品番: ' + scanKey(last) + '\nよろしいですか？', function(){
+  const hhmmss = String(last.ts || '').slice(11, 19);
+  // 取り消すのは「直前の現品1枚」。マスタ／特殊QRは、そのセット（同じマスタ・特殊QRで読んだ現品）の最後の1枚を
+  // 取り消したときだけ一緒に消えて、通常に戻る。途中の1枚を取り消してもマスタ・モードは保持される。
+  const sid = last.setId || null;
+  const emptied = !!sid && !pending.scans.slice(0, -1).some(x => x.setId === sid);
+  const active = !!sid && pending.setId === sid;
+  const modeEntry = emptied ? (stack.filter(e => e.kind === 'mode' && e.setId === sid)[0] || null) : null;
+  const together = [];
+  if (emptied && active && pending.master && pending.master.type === 'hinban') together.push('マスタ: ' + pending.master.hinban);
+  if (modeEntry) together.push('特殊QR: ' + undoModeLabel_(modeEntry.code));
+  showConfirm('【読取】を取り消します。\n品番: ' + last.hinban + '\nモード: ' + undoModeLabel_(last.mode) + '\n読取時刻: ' + hhmmss
+    + (together.length ? '\n\n一緒に消えるもの\n　' + together.join('\n　') + '\n→ 通常に戻ります' : '')
+    + '\n\nよろしいですか？', function(){
     pending.scans.pop();
-    restore();
+    if (fromStack) stack.pop();
+    if (emptied){
+      if (modeEntry) pending.undoStack = pending.undoStack.filter(e => e !== modeEntry);
+      if (active){ pending.master = null; pending.mode = 'normal'; pending.setId = null; }
+    } else if (!sid){
+      pending.master = top.prevMaster || null; // セットに属さない読取（rainch系など）は、マスタだけ読む前の状態に戻す
+    }
     rebuildQrSeen();
     const lk = scanKey(last);
-    const stillHas = pending.scans.some(s => scanKey(s) === lk);
-    if (!stillHas) delete pending.extra[lk];
+    if (!pending.scans.some(s => scanKey(s) === lk)) delete pending.extra[lk];
     lset(K_PENDING, pending);
     syncModeFromMaster();
     renderTally();

@@ -362,7 +362,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.15';   // 更新のたびにここを上げる
+const APP_VERSION = 'v1.16';   // 更新のたびにここを上げる
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbyMZEogfrGCsH-joO1oBN0GST7GA_3wUwYdJ1ciomnJQ7Nh8NBs9SiTkrCmcrsmdArkGQ/exec';
 
 const QR_MIN = 63, QR_MAX = 350;
@@ -1003,14 +1003,14 @@ function onDecode(raw){
   if (document.getElementById('vibOn').checked && navigator.vibrate) navigator.vibrate(350);
   renderTally();
 }
-// 数えない記録（特殊QRの切替・不一致）を、送信ログと履歴に残す。重複チェック（qrSeen）には入れない。
+// 数えない記録（不一致）を、送信ログと履歴に残す。重複チェック（qrSeen）には入れない。
 function logRow_(r){
   const d = new Date();
   r.ts = fmtDate(d) + ' ' + d.toTimeString().slice(0,8) + '.' + String(d.getMilliseconds()).padStart(3,'0')
        + '/' + deviceId() + '-' + (++scanSeq);
   (pending.masterLog = pending.masterLog || []).push(r);
 }
-// モードQR（紙）を読んだ時の処理。読取枚数には含めないが、送信ログ・履歴には残す。重複チェックの対象にはしない。
+// モードQR（紙）を読んだ時の処理。読取枚数には含めず、送信ログにも行を出さない（以降の現品の行にマスタ列・モード列で出る）。重複チェックの対象にはしない。
 // 読んだ後は、カラブリ・hamidasi・グループA（damu系）は「コード→現品」の1段階読取。通常（kaizyo後）だけ「マスタ→現品」の2段階読取。
 // 以降に受理した現品には、このモードが記録される（kaizyoで通常に戻る）。
 function handleModeQr(code){
@@ -1021,7 +1021,6 @@ function handleModeQr(code){
     // kaizyo / karaburi / hamidasi / グループA：モード切替（グループAは以降、マスタなしの1段階読取）
     pending.mode = (code === 'kaizyo') ? 'normal' : code;
     pending.master = null;
-    logRow_({ masterQr: code, masterHinban: code, qr: code, hinban: code, result: '特殊QR', mode: code });
     lset(K_PENDING, pending);
     syncModeFromMaster();
     const label = MODE_LABEL[pending.mode] || pending.mode;
@@ -1437,7 +1436,7 @@ function showHistoryDetail(i){
   document.getElementById('histList').innerHTML =
     '<div class="rev-wrap"><table class="rev-table"><colgroup><col class="c-hinban"><col class="c-hako"><col class="c-suryou"></colgroup>'
     + '<thead><tr><th>品番</th><th>箱数</th><th>数量</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
-    + (evs ? '<div style="margin-top:12px;font-weight:800;font-size:13px;">特殊QR・不一致の記録</div>' + evs : '');
+    + (evs ? '<div style="margin-top:12px;font-weight:800;font-size:13px;">不一致の記録</div>' + evs : '');
   const btn = document.getElementById('histBackBtn');
   btn.textContent = '← 一覧にもどる';
   btn.onclick = renderHistoryList;

@@ -362,7 +362,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.12';   // 更新のたびにここを上げる
+const APP_VERSION = 'v1.13';   // 更新のたびにここを上げる
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbwbBkUT4wBj3-KzIlqrv2IPckprlcryrK-Jom4xcwcyVyK4LzQT2DJ0v8se-p1Bq58pDQ/exec';
 
 const QR_MIN = 63, QR_MAX = 350;
@@ -780,7 +780,7 @@ function resumeCamera(){
 let lastScannedHinban = null;
 function refreshResultForLastHinban(){
   if (!lastScannedHinban || !pending || !pending.scans) return;
-  const arr = pending.scans.filter(s => s.hinban === lastScannedHinban);
+  const arr = pending.scans.filter(s => scanKey(s) === lastScannedHinban);
   if (!arr.length){ showResult('idle', '📷 かざしてください'); return; }
   const ex = pending.extra[lastScannedHinban] || {};
   const hasuuNow = ex.hasuu ? (parseInt(ex.hasuu, 10) || 0) : 0;
@@ -994,7 +994,7 @@ function onDecode(raw){
   syncModeFromMaster();
   flash('ok', 'OK');
 
-  lastScannedHinban = hinban;
+  lastScannedHinban = scanKey(pending.scans[pending.scans.length - 1]);
   refreshResultForLastHinban();
 
   if (document.getElementById('beepOn').checked) beep(1250, .28);
@@ -1073,11 +1073,12 @@ function closeMismatchOverlay(){
 function undoLast(){
   if (!pending || !pending.scans.length) return;
   const last = pending.scans[pending.scans.length - 1];
-  showConfirm('直前の読取を取り消します。\n品番: ' + last.hinban + '\nよろしいですか？', function(){
+  showConfirm('直前の読取を取り消します。\n品番: ' + scanKey(last) + '\nよろしいですか？', function(){
     pending.scans.pop();
     qrSeen.delete(last.qr);
-    const stillHas = pending.scans.some(s => s.hinban === last.hinban);
-    if (!stillHas) delete pending.extra[last.hinban];
+    const lk = scanKey(last);
+    const stillHas = pending.scans.some(s => scanKey(s) === lk);
+    if (!stillHas) delete pending.extra[lk];
     lset(K_PENDING, pending);
     renderTally();
     refreshResultForLastHinban();
@@ -1091,9 +1092,14 @@ function updateUndoBtn(){
 }
 
 /* ================= タリー ================= */
+// 集計・確認画面の行キー。カラブリ・damu系で受理した現品は、通常の同じ品番とは別行にする（hamidasiは同じ行に「×n」で入る）。
+function scanKey(s){
+  const sep = (s.mode === 'karaburi' || MODE_GROUP_A.indexOf(s.mode) !== -1);
+  return sep ? s.hinban + '【' + (MODE_LABEL[s.mode] || s.mode) + '】' : s.hinban;
+}
 function tallyMap(){
   const m = {};
-  pending.scans.forEach(s => { m[s.hinban] = (m[s.hinban]||0) + 1; });
+  pending.scans.forEach(s => { const k = scanKey(s); m[k] = (m[k]||0) + 1; });
   return m;
 }
 function modeTagHtml(modes){
@@ -1125,7 +1131,7 @@ function openExtra(hinban){
   sel.innerHTML = keys.map(k => '<option'+((hinban && k===hinban)?' selected':'')+'>'+esc(k)+'</option>').join('');
   if (!hinban){
     const last = pending.scans[pending.scans.length-1];
-    if (last) sel.value = last.hinban;
+    if (last) sel.value = scanKey(last);
   }
   loadExtraInputs();
   document.getElementById('extraSheet').classList.add('on');
@@ -1246,7 +1252,7 @@ function goReview(){
 }
 function reviewItems(){
   const byH = {};
-  pending.scans.forEach(s => { (byH[s.hinban] = byH[s.hinban] || []).push(s); });
+  pending.scans.forEach(s => { const k = scanKey(s); (byH[k] = byH[k] || []).push(s); });
   return Object.keys(byH).sort().map(function (h) {
     const arr = byH[h];
     const mai = arr.length;
@@ -1257,7 +1263,7 @@ function reviewItems(){
     const suryou = hako * youbun + hasuuNum;
     // 特殊QR後に受理した枚数（はみ出し・空箱・エリアコード）。表示用のタグにする
     const modes = {};
-    arr.forEach(x => { if (x.mode && x.mode !== 'normal' && x.hinban !== x.mode) modes[x.mode] = (modes[x.mode] || 0) + 1; });
+    arr.forEach(x => { if (x.mode === 'hamidasi') modes[x.mode] = (modes[x.mode] || 0) + 1; }); // 別行にしない特殊QR（はみ出し）だけ「×n」で表示
     return { hinban: h, mai: mai, hako: hako, youbun: youbun, suryou: suryou, hasuu: ex.hasuu || '', hakai: ex.hakai || '', modes: modes };
   });
 }
@@ -1294,10 +1300,10 @@ function renderReview(){
   });
 }
 function deleteHinbanFromReview(h){
-  const cnt = pending.scans.filter(s => s.hinban === h).length;
+  const cnt = pending.scans.filter(s => scanKey(s) === h).length;
   showConfirm('品番「' + h + '」を削除します（' + cnt + '枚ぶん）。\nよろしいですか？', function () {
-    pending.scans.filter(s => s.hinban === h).forEach(s => qrSeen.delete(s.qr));
-    pending.scans = pending.scans.filter(s => s.hinban !== h);
+    pending.scans.filter(s => scanKey(s) === h).forEach(s => qrSeen.delete(s.qr));
+    pending.scans = pending.scans.filter(s => scanKey(s) !== h);
     delete pending.extra[h];
     lset(K_PENDING, pending);
     if (!pending.scans.length) {
@@ -1319,7 +1325,7 @@ function revEdit(h, key, val){
 /* ================= 送信 ================= */
 function buildRows(){
   const byH = {};
-  pending.scans.forEach(s => { (byH[s.hinban] = byH[s.hinban] || []).push(s); });
+  pending.scans.forEach(s => { const k = scanKey(s); (byH[k] = byH[k] || []).push(s); });
   const rows = [];
   Object.keys(byH).forEach(h => {
     const arr = byH[h];
@@ -1327,7 +1333,7 @@ function buildRows(){
     arr.forEach((s, i) => {
       const isLast = (i === arr.length - 1);
       rows.push({
-        ts: s.ts, masterQr: s.masterQr || '', masterHinban: s.masterHinban || '', qr: s.qr, hinban: h,
+        ts: s.ts, masterQr: s.masterQr || '', masterHinban: s.masterHinban || '', qr: s.qr, hinban: s.hinban,
         result: s.result || '一致', mode: s.mode || 'normal',
         hasuu: (isLast && ex.hasuu) ? ex.hasuu : '',
         hakai: (isLast && ex.hakai) ? ex.hakai : ''

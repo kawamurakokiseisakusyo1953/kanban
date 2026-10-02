@@ -362,7 +362,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.07';   // 更新のたびにここを上げる
+const APP_VERSION = 'v1.08';   // 更新のたびにここを上げる
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbwbBkUT4wBj3-KzIlqrv2IPckprlcryrK-Jom4xcwcyVyK4LzQT2DJ0v8se-p1Bq58pDQ/exec';
 
 const QR_MIN = 63, QR_MAX = 350;
@@ -931,9 +931,12 @@ function onDecode(raw){
 
   const manualBypass = document.getElementById('bypass').checked;
   const master = pending.master; // null | {type:'hinban',hinban,qr}
+  // エリアコード（damu系）を読んだ後は、マスタを読まず「エリアコード→現品」の1段階読取（kaizyo等で解除するまで続く）。
+  // この間、出力のマスタQR・マスタ品番にはそのコードが入る（aia仕様）。
+  const area = (MODE_GROUP_A.indexOf(pending.mode) !== -1) ? pending.mode : null;
 
-  // ②同一札の重複スキャン（緊急OFF時だけスキップ）。特殊QR・マスタ読取は重複チェックの対象にしない。
-  if (!manualBypass && qrSeen.has(raw)){
+  // ②同一札の重複スキャン（緊急OFF・エリアコード中はスキップ）。特殊QR・マスタ読取は重複チェックの対象にしない。
+  if (!manualBypass && !area && qrSeen.has(raw)){
     rejCounts.dup++;
     reject('dup', '重複エラー：この札は読み取り済みです。再スキャンしないでください');
     return;
@@ -944,7 +947,7 @@ function onDecode(raw){
 
   // ③マスタ一致判定（特殊QRを読んだ後でも、必ず「マスタ→現品」の2段階読取）
   let matched;
-  if (manualBypass){
+  if (manualBypass || area){
     matched = true;
   } else if (!master){
     // マスタ未設定 → この1枚をマスタとして記憶し、比較用の次の1枚を待つ
@@ -977,7 +980,7 @@ function onDecode(raw){
            + '.' + String(d.getMilliseconds()).padStart(3,'0')
            + '/' + deviceId() + '-' + (++scanSeq);
   pending.scans.push({ ts: ts, qr: raw, hinban: hinban, youbun: youbun, mode: currentMode,
-                       masterQr: master ? master.qr : '', masterHinban: master ? master.hinban : '', result: '一致' });
+                       masterQr: area ? area : (master ? master.qr : ''), masterHinban: area ? area : (master ? master.hinban : ''), result: '一致' });
   qrSeen.add(raw);
   // 通常の一致ではマスタをそのまま維持する → 同じマスタに対して続けて何枚でも現品を読める（aia仕様）
   lset(K_PENDING, pending);
@@ -999,14 +1002,14 @@ function logRow_(r){
   (pending.masterLog = pending.masterLog || []).push(r);
 }
 // モードQR（紙）を読んだ時の処理。読取枚数には含めないが、送信ログ・履歴には残す。重複チェックの対象にはしない。
-// 読んだ後は必ず「マスタ→現品」の2段階読取に戻る（マスタをクリアする）。
+// 読んだ後は、karaburi/hamidasi/kaizyoは「マスタ→現品」の2段階読取、グループA（damu系）は「コード→現品」の1段階読取。
 // 以降に受理した現品には、このモードが記録される（kaizyoで通常に戻る）。
 function handleModeQr(code){
   const vibOn = document.getElementById('vibOn').checked && navigator.vibrate;
   const beepOn = document.getElementById('beepOn').checked;
 
   if (MODE_GROUP_B.indexOf(code) === -1){
-    // kaizyo / karaburi / hamidasi / グループA：モード切替
+    // kaizyo / karaburi / hamidasi / グループA：モード切替（グループAは以降、マスタなしの1段階読取）
     pending.mode = (code === 'kaizyo') ? 'normal' : code;
     pending.master = null;
     logRow_({ masterQr: code, masterHinban: code, qr: code, hinban: code, result: '特殊QR', mode: code });

@@ -362,7 +362,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.05';   // 更新のたびにここを上げる
+const APP_VERSION = 'v1.07';   // 更新のたびにここを上げる
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbwbBkUT4wBj3-KzIlqrv2IPckprlcryrK-Jom4xcwcyVyK4LzQT2DJ0v8se-p1Bq58pDQ/exec';
 
 const QR_MIN = 63, QR_MAX = 350;
@@ -372,11 +372,13 @@ const LOOP_MIN_MS = 90;
 const REFOCUS_EVERY_FRAMES = 6;
 
 // 紙のQRでモードを切り替える特殊コード（karaburi v55由来。同じ紙をそのまま使う想定なので文言は変えていない）。
-// kaizyo   = 通常モードに戻す（マスタ・バイパスを完全リセット）
-// karaburi = 空箱モード。次の現品1枚だけ照合なしで受理し、受理した時点で自動的に通常モードへ戻る（1回使い切り）
-// hamidasi = はみ出しモード。kaizyo等で解除するまで、以降の現品は全て照合なしで受理し続ける（居座り型）
-// グループA = karaburiと同じ「照合なしバイパス」だが、karaburiと違い使い切りにならず、kaizyo等で解除するまで居座る
-// グループB = 単独で完結するイベント記録（現品照合なし）。読み取った瞬間に1件だけ記録し、即座に通常モードへ戻る
+// 特殊QRを読んでも「マスタ→現品」の2段階読取は変わらない（照合は省略しない）。読み取った特殊QRは
+// 送信ログ・履歴に残すが、重複チェックの対象にはしない。以降に受理した現品には、そのモードを記録する。
+// kaizyo   = 通常モードに戻す
+// karaburi = 空箱モード（現品に「空箱」と記録される）
+// hamidasi = はみ出しモード（現品に「はみ出し」と記録される）
+// グループA = エリアコード（現品にそのコードが記録される）。kaizyoで解除するまで続く
+// グループB = 単独で完結するイベント記録。読み取った瞬間に1件だけ記録する
 const MODE_GROUP_A = ['1-1damu','1-2barasi','1-2damu','2-1damu','3-1damu','3-2damu','5-1damu','5-2damu',
                        '6-1damu','6-2damu','7-1damu','7-2barasi','7-2damu','kasimedam','nokisita'];
 const MODE_GROUP_B = ['daisya','sonota','1f2fid','zisouh','3fokib','hannyu','chudan','rainse',
@@ -400,12 +402,10 @@ function deviceId(){
 
 /* ================= 状態 ================= */
 let auth = lget(K_AUTH, null);            // {staff,hinbanReady,hinban:[],staffList:[],ts}
-// pending.master: null | {type:'hinban',hinban,qr} | {type:'code',code}
-//   null            = マスタ未設定（次の1枚がマスタになる）
-//   type:'hinban'   = 実際のかんばんをマスタとして記憶中（品番で比較）
-//   type:'code'     = karaburi/hamidasi/グループAの紙コードがマスタ枠に入っている状態（常に一致扱い）
-// pending.kbBypass: karaburi/グループA読取時にtrue。一致が確定すると、karaburiだけ自動でfalseに戻る（1回使い切り）。
-let pending = lget(K_PENDING, null);      // {staff, scans:[{ts,qr,hinban,youbun,mode}], extra:{hinban:{hasuu,hakai}}, master, kbBypass}
+// pending.master: null | {type:'hinban',hinban,qr}   null＝マスタ未設定（次の1枚がマスタになる）
+// pending.mode: 'normal' | 'karaburi' | 'hamidasi' | グループAコード（特殊QRで切り替わる。受理した現品に記録される）
+// pending.masterLog: 数えない記録（マスタ読取・特殊QR）。送信ログと履歴にだけ出す
+let pending = lget(K_PENDING, null);      // {staff, scans:[{ts,qr,hinban,youbun,mode}], extra:{hinban:{hasuu,hakai}}, master, mode, masterLog}
 let hinbanSet = null;
 let qrSeen = new Set();                   // このpending内で既に受理した生QR（2度読み検知用）
 let scanSeq = 0;
@@ -584,10 +584,12 @@ function enterScanScreen(){
     return;
   }
   if (!pending || pending.staff !== auth.staff){
-    pending = { staff: auth.staff, scans: [], extra: {}, master: null, kbBypass: false };
+    pending = { staff: auth.staff, scans: [], extra: {}, master: null, mode: 'normal' };
     lset(K_PENDING, pending);
   }
-  if (pending.kbBypass === undefined) pending.kbBypass = false; // 旧データからの復帰互換
+  // 旧バージョンの保存データからの復帰互換（マスタ枠に入っていた特殊コードは、モード扱いに移す）
+  if (pending.master && pending.master.type === 'code'){ pending.mode = pending.master.code; pending.master = null; }
+  if (!pending.mode) pending.mode = 'normal';
   rebuildQrSeen();
   syncModeFromMaster();
   updateScanHeader();
@@ -600,10 +602,9 @@ function updateScanHeader(){
   const staff = (pending && pending.staff) || (auth && auth.staff) || '—';
   document.getElementById('scStaff').textContent = staff + ' ▾';
 }
-// pending.masterの状態から表示用モードを導出する（真の状態はpending.master/pending.kbBypassが持つ）。
+// 現在のモード（特殊QRで切り替わる）をpending.modeから反映し、バッジを更新する。
 function syncModeFromMaster(){
-  const m = pending && pending.master;
-  currentMode = (m && m.type === 'code') ? m.code : 'normal';
+  currentMode = (pending && pending.mode) || 'normal';
   updateModeBadge();
   updateMasterBadge();
 }
@@ -929,14 +930,10 @@ function onDecode(raw){
   }
 
   const manualBypass = document.getElementById('bypass').checked;
-  const master = pending.master; // null | {type:'hinban',...} | {type:'code',code}
-  const isHamidasi = !!(master && master.type === 'code' && master.code === 'hamidasi');
-  const isCodeBypass = !!(master && master.type === 'code' && !isHamidasi && pending.kbBypass);
-  const bypass = manualBypass || isCodeBypass;
-  const forceCheck = isHamidasi;
+  const master = pending.master; // null | {type:'hinban',hinban,qr}
 
-  // ②同一札の重複スキャン（バイパス中はスキップするが、hamidasiモードなら必ずチェックする）
-  if ((!bypass || forceCheck) && qrSeen.has(raw)){
+  // ②同一札の重複スキャン（緊急OFF時だけスキップ）。特殊QR・マスタ読取は重複チェックの対象にしない。
+  if (!manualBypass && qrSeen.has(raw)){
     rejCounts.dup++;
     reject('dup', '重複エラー：この札は読み取り済みです。再スキャンしないでください');
     return;
@@ -945,26 +942,14 @@ function onDecode(raw){
   const hinban = raw.substring(38, 63).trim();
   const youbun = parseInt(raw.substring(85, 92).trim(), 10) || 0;
 
-  // ③マスタ一致判定
+  // ③マスタ一致判定（特殊QRを読んだ後でも、必ず「マスタ→現品」の2段階読取）
   let matched;
-  let isKaraburiOneShot = false;
   if (manualBypass){
     matched = true;
-  } else if (isHamidasi){
-    matched = true; // はみ出しモード中は常に一致扱い（重複だけは②で必ずチェック済み）
-  } else if (isCodeBypass){
-    matched = true;
-    isKaraburiOneShot = (master.code === 'karaburi'); // karaburiのみ使い切り。グループAは居座る
   } else if (!master){
     // マスタ未設定 → この1枚をマスタとして記憶し、比較用の次の1枚を待つ
     // マスタ読取は重複チェック（qrSeen）・読取枚数の対象にしない。送信ログ用にだけ別枠で記録する。
     pending.master = { type:'hinban', hinban: hinban, qr: raw };
-    const md = new Date();
-    (pending.masterLog = pending.masterLog || []).push({
-      ts: fmtDate(md) + ' ' + md.toTimeString().slice(0,8) + '.' + String(md.getMilliseconds()).padStart(3,'0')
-          + '/' + deviceId() + '-' + (++scanSeq),
-      qr: raw, hinban: hinban, mode: 'master'
-    });
     lset(K_PENDING, pending);
     syncModeFromMaster();
     flash('ok', 'マスタ');
@@ -972,32 +957,29 @@ function onDecode(raw){
     if (document.getElementById('beepOn').checked) beep(900, .15);
     if (document.getElementById('vibOn').checked && navigator.vibrate) navigator.vibrate(150);
     return;
-  } else { // master.type === 'hinban'
+  } else {
     matched = (hinban === master.hinban);
   }
 
   if (!matched){
     rejCounts.master++;
-    const masterLabel = (master && master.type === 'hinban') ? master.hinban : (master ? (MODE_LABEL[master.code] || master.code) : '(なし)');
+    logRow_({ masterQr: master.qr, masterHinban: master.hinban, qr: raw, hinban: hinban, result: '不一致', mode: currentMode });
+    lset(K_PENDING, pending);
     const box = document.getElementById('rejBox');
     box.textContent = '弾いた累計：重複 ' + rejCounts.dup + ' / 不一致 ' + rejCounts.master + ' / 形式 ' + rejCounts.format;
-    showMismatchOverlay('マスタ: ' + masterLabel + '\n今回　: ' + (hinban || '(空)'));
+    showMismatchOverlay('マスタ: ' + master.hinban + '\n今回　: ' + (hinban || '(空)'));
     return;
   }
 
-  // 受理（一致 or チェック対象外）
+  // 受理（一致 or 緊急OFF）。mode には、直前に読んだ特殊QR（はみ出し・エリアコード等）をそのまま記録する。
   const d = new Date();
   const ts = fmtDate(d) + ' ' + d.toTimeString().slice(0,8)
            + '.' + String(d.getMilliseconds()).padStart(3,'0')
            + '/' + deviceId() + '-' + (++scanSeq);
-  pending.scans.push({ ts: ts, qr: raw, hinban: hinban, youbun: youbun, mode: currentMode });
+  pending.scans.push({ ts: ts, qr: raw, hinban: hinban, youbun: youbun, mode: currentMode,
+                       masterQr: master ? master.qr : '', masterHinban: master ? master.hinban : '', result: '一致' });
   qrSeen.add(raw);
-  if (isKaraburiOneShot){
-    pending.master = null;
-    pending.kbBypass = false;
-  }
-  // それ以外（通常の品番一致・グループAバイパス中・はみ出し中）はマスタをそのまま維持する
-  // → 同じマスタに対して続けて何枚でも現品を読める（aia仕様）
+  // 通常の一致ではマスタをそのまま維持する → 同じマスタに対して続けて何枚でも現品を読める（aia仕様）
   lset(K_PENDING, pending);
   syncModeFromMaster();
   flash('ok', 'OK');
@@ -1009,70 +991,49 @@ function onDecode(raw){
   if (document.getElementById('vibOn').checked && navigator.vibrate) navigator.vibrate(350);
   renderTally();
 }
-// モードQR（紙）を読んだ時の処理。通常の読取カウントには含めない（品番を持たないため）。
+// 数えない記録（特殊QRの切替・不一致）を、送信ログと履歴に残す。重複チェック（qrSeen）には入れない。
+function logRow_(r){
+  const d = new Date();
+  r.ts = fmtDate(d) + ' ' + d.toTimeString().slice(0,8) + '.' + String(d.getMilliseconds()).padStart(3,'0')
+       + '/' + deviceId() + '-' + (++scanSeq);
+  (pending.masterLog = pending.masterLog || []).push(r);
+}
+// モードQR（紙）を読んだ時の処理。読取枚数には含めないが、送信ログ・履歴には残す。重複チェックの対象にはしない。
+// 読んだ後は必ず「マスタ→現品」の2段階読取に戻る（マスタをクリアする）。
+// 以降に受理した現品には、このモードが記録される（kaizyoで通常に戻る）。
 function handleModeQr(code){
   const vibOn = document.getElementById('vibOn').checked && navigator.vibrate;
   const beepOn = document.getElementById('beepOn').checked;
 
-  if (code === 'kaizyo'){
+  if (MODE_GROUP_B.indexOf(code) === -1){
+    // kaizyo / karaburi / hamidasi / グループA：モード切替
+    pending.mode = (code === 'kaizyo') ? 'normal' : code;
     pending.master = null;
-    pending.kbBypass = false;
+    logRow_({ masterQr: code, masterHinban: code, qr: code, hinban: code, result: '特殊QR', mode: code });
     lset(K_PENDING, pending);
     syncModeFromMaster();
-    flash('ok', '通常');
-    showResult('ok', '🔀 モードを「通常」に切り替えました');
+    const label = MODE_LABEL[pending.mode] || pending.mode;
+    flash('ok', label);
+    showResult('ok', '🔀 モードを「' + esc(label) + '」に切り替えました（続けてマスタ→現品の順に読んでください）');
     if (vibOn) navigator.vibrate(500);
     return;
   }
-  if (code === 'karaburi'){
-    pending.master = { type:'code', code:'karaburi' };
-    pending.kbBypass = true;
-    lset(K_PENDING, pending);
-    syncModeFromMaster();
-    flash('ok', MODE_LABEL.karaburi);
-    showResult('ok', '🔀 モードを「' + esc(MODE_LABEL.karaburi) + '」に切り替えました（次の現品1枚だけ照合なしで受理）');
-    if (vibOn) navigator.vibrate(500);
-    return;
-  }
-  if (code === 'hamidasi'){
-    pending.master = { type:'code', code:'hamidasi' };
-    // hamidasiはkb_bypass_activeを立てない（aia仕様）。解除まで居座る。
-    lset(K_PENDING, pending);
-    syncModeFromMaster();
-    flash('ok', MODE_LABEL.hamidasi);
-    showResult('ok', '🔀 モードを「' + esc(MODE_LABEL.hamidasi) + '」に切り替えました');
-    if (vibOn) navigator.vibrate(500);
-    return;
-  }
-  if (MODE_GROUP_A.indexOf(code) !== -1){
-    pending.master = { type:'code', code: code };
-    pending.kbBypass = true;
-    lset(K_PENDING, pending);
-    syncModeFromMaster();
-    flash('ok', code);
-    showResult('ok', '🔀 エリアコード「' + esc(code) + '」を読み取りました（解除まで現品は照合なしで受理）');
-    if (vibOn) navigator.vibrate(500);
-    return;
-  }
-  if (MODE_GROUP_B.indexOf(code) !== -1){
-    // 現品照合を伴わない、単独で完結するイベント記録。読み取った瞬間に1件だけ記録し、通常モードへ戻る。
-    const d = new Date();
-    const ts = fmtDate(d) + ' ' + d.toTimeString().slice(0,8)
-             + '.' + String(d.getMilliseconds()).padStart(3,'0')
-             + '/' + deviceId() + '-' + (++scanSeq);
-    pending.scans.push({ ts: ts, qr: code, hinban: code, youbun: 0, mode: code });
-    pending.master = null;
-    pending.kbBypass = false;
-    qrSeen.add(code);
-    lset(K_PENDING, pending);
-    syncModeFromMaster();
-    flash('ok', '完了');
-    showResult('ok', '📦 読取完了（' + esc(code) + '）');
-    if (beepOn) beep(1250, .28);
-    if (vibOn) navigator.vibrate(350);
-    renderTally();
-    return;
-  }
+
+  // グループB：現品照合を伴わない、単独で完結するイベント記録。読み取った瞬間に1件だけ記録する（重複チェック対象外）。
+  const d = new Date();
+  const ts = fmtDate(d) + ' ' + d.toTimeString().slice(0,8)
+           + '.' + String(d.getMilliseconds()).padStart(3,'0')
+           + '/' + deviceId() + '-' + (++scanSeq);
+  pending.scans.push({ ts: ts, qr: code, hinban: code, youbun: 0, mode: code,
+                       masterQr: code, masterHinban: code, result: '一致' });
+  pending.master = null;
+  lset(K_PENDING, pending);
+  syncModeFromMaster();
+  flash('ok', '完了');
+  showResult('ok', '📦 読取完了（' + esc(code) + '）');
+  if (beepOn) beep(1250, .28);
+  if (vibOn) navigator.vibrate(350);
+  renderTally();
 }
 function fmtDate(d){
   return d.getFullYear() + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + String(d.getDate()).padStart(2,'0');
@@ -1124,6 +1085,10 @@ function tallyMap(){
   pending.scans.forEach(s => { m[s.hinban] = (m[s.hinban]||0) + 1; });
   return m;
 }
+function modeTagHtml(modes){
+  return Object.keys(modes || {}).map(m =>
+    ' <span style="color:var(--accent);font-size:12px;font-weight:800;">【' + esc(MODE_LABEL[m] || m) + '×' + modes[m] + '】</span>').join('');
+}
 function renderTally(){
   const items = reviewItems();
   const tb = document.getElementById('tally');
@@ -1132,7 +1097,7 @@ function renderTally(){
     if (it.hasuu) tag.push('端数' + it.hasuu);
     if (it.hakai) tag.push('破壊' + it.hakai);
     return '<tr>'
-      + '<td>' + esc(it.hinban) + (tag.length ? ' <span style="color:var(--warn);font-size:12px;">'+tag.join(' ')+'</span>' : '') + '</td>'
+      + '<td>' + esc(it.hinban) + modeTagHtml(it.modes) + (tag.length ? ' <span style="color:var(--warn);font-size:12px;">'+tag.join(' ')+'</span>' : '') + '</td>'
       + '<td class="num">' + it.hako + '箱</td>'
       + '<td class="num">' + it.suryou + '個</td></tr>';
   }).join('');
@@ -1279,7 +1244,10 @@ function reviewItems(){
     const hako = hasuuNum > 0 ? (mai - 1) : mai;
     const youbun = arr[0].youbun || 0;
     const suryou = hako * youbun + hasuuNum;
-    return { hinban: h, mai: mai, hako: hako, youbun: youbun, suryou: suryou, hasuu: ex.hasuu || '', hakai: ex.hakai || '' };
+    // 特殊QR後に受理した枚数（はみ出し・空箱・エリアコード）。表示用のタグにする
+    const modes = {};
+    arr.forEach(x => { if (x.mode && x.mode !== 'normal' && x.hinban !== x.mode) modes[x.mode] = (modes[x.mode] || 0) + 1; });
+    return { hinban: h, mai: mai, hako: hako, youbun: youbun, suryou: suryou, hasuu: ex.hasuu || '', hakai: ex.hakai || '', modes: modes };
   });
 }
 function renderReview(){
@@ -1290,7 +1258,7 @@ function renderReview(){
     const hAttr = esc(h);
     return '<tr>'
       + '<td>'
-        + '<div class="hinban-name">' + esc(h) + '</div>'
+        + '<div class="hinban-name">' + esc(h) + modeTagHtml(it.modes) + '</div>'
         + '<div class="rev-tags">'
           + '<span class="rev-tag numtap' + (it.hasuu===''?' empty':'') + '" data-h="' + hAttr + '" data-key="hasuu">端数' + (it.hasuu!==''?it.hasuu:'—') + '</span>'
           + '<span class="rev-tag numtap' + (it.hakai===''?' empty':'') + '" data-h="' + hAttr + '" data-key="hakai">破壊' + (it.hakai!==''?it.hakai:'—') + '</span>'
@@ -1348,14 +1316,16 @@ function buildRows(){
     arr.forEach((s, i) => {
       const isLast = (i === arr.length - 1);
       rows.push({
-        ts: s.ts, qr: s.qr, hinban: h, mode: s.mode || 'normal',
+        ts: s.ts, masterQr: s.masterQr || '', masterHinban: s.masterHinban || '', qr: s.qr, hinban: h,
+        result: s.result || '一致', mode: s.mode || 'normal',
         hasuu: (isLast && ex.hasuu) ? ex.hasuu : '',
         hakai: (isLast && ex.hakai) ? ex.hakai : ''
       });
     });
   });
   (pending.masterLog || []).forEach(m => {
-    rows.push({ ts: m.ts, qr: m.qr, hinban: m.hinban, mode: 'master', hasuu: '', hakai: '' });
+    rows.push({ ts: m.ts, masterQr: m.masterQr || '', masterHinban: m.masterHinban || '', qr: m.qr, hinban: m.hinban,
+                result: m.result || '', mode: m.mode, hasuu: '', hakai: '' });
   });
   return rows;
 }
@@ -1371,12 +1341,13 @@ function doSend(){
   btn.disabled = true; btn.textContent = '送信中...';
   const payload = { staff: pending.staff, rows: buildRows() };
   const itemsSnapshot = reviewItems();
+  const eventsSnapshot = (pending.masterLog || []).map(m => ({ ts: m.ts, mode: m.mode, hinban: m.hinban, result: m.result || '', masterHinban: m.masterHinban || '' }));
   fetch(GAS_URL, { method:'POST', headers:{'Content-Type':'text/plain'}, body: JSON.stringify(payload) })
     .then(r => r.json()).then(res => {
       btn.disabled = false; btn.textContent = '送信（ネット必要）';
       if (!res.ok){ err.textContent = 'エラー: ' + (res.message || '不明'); return; }
       const hist = lget(K_HIST, []);
-      hist.unshift({ sentAt: new Date().toISOString(), staff: payload.staff, rows: res.added, items: itemsSnapshot });
+      hist.unshift({ sentAt: new Date().toISOString(), staff: payload.staff, rows: res.added, items: itemsSnapshot, events: eventsSnapshot });
       lset(K_HIST, hist.slice(0, 200));
       ldel(K_PENDING); pending = null; qrSeen = new Set();
       document.getElementById('doneTitle').textContent = '送信完了';
@@ -1431,15 +1402,23 @@ function showHistoryDetail(i){
     const hasuu = (it.hasuu !== '' && it.hasuu != null) ? it.hasuu : '—';
     const hakai = (it.hakai !== '' && it.hakai != null) ? it.hakai : '—';
     return '<tr><td>'
-      + '<div class="hinban-name">' + esc(it.hinban) + '</div>'
+      + '<div class="hinban-name">' + esc(it.hinban) + modeTagHtml(it.modes) + '</div>'
       + '<div class="rev-tags"><span class="rev-tag" style="cursor:default;">端数' + hasuu + '</span><span class="rev-tag" style="cursor:default;">破壊' + hakai + '</span></div>'
       + '</td>'
       + '<td class="hako">' + it.hako + '</td>'
       + '<td class="suryou">' + it.suryou + '</td></tr>';
   }).join('');
+  const evs = (h.events || []).map(function (e) {
+    let line;
+    if (e.result === '不一致') line = '❌不一致　マスタ:' + esc(e.masterHinban) + ' / 今回:' + esc(e.hinban);
+    else if (e.mode === 'kaizyo') line = '🔀通常に戻す';
+    else line = '🔀' + esc(MODE_LABEL[e.mode] || e.mode);
+    return '<div class="hist-row-sub">' + esc(String(e.ts).slice(11, 19)) + '　' + line + '</div>';
+  }).join('');
   document.getElementById('histList').innerHTML =
     '<div class="rev-wrap"><table class="rev-table"><colgroup><col class="c-hinban"><col class="c-hako"><col class="c-suryou"></colgroup>'
-    + '<thead><tr><th>品番</th><th>箱数</th><th>数量</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+    + '<thead><tr><th>品番</th><th>箱数</th><th>数量</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+    + (evs ? '<div style="margin-top:12px;font-weight:800;font-size:13px;">特殊QR・不一致の記録</div>' + evs : '');
   const btn = document.getElementById('histBackBtn');
   btn.textContent = '← 一覧にもどる';
   btn.onclick = renderHistoryList;

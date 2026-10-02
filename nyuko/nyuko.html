@@ -191,10 +191,13 @@
   <div class="hd">
     <span class="badge tap" id="scStaff" onclick="confirmSwitchStaff()">—</span>
     <span class="badge" id="scMode">通常</span>
+    <span class="badge tap" onclick="lockScreen()">🔒ロック</span>
     <span class="badge tap" onclick="openRecoveryQr()">🔧</span>
   </div>
-  <div class="hd">
-    <span class="badge warn" id="scMaster" style="display:none;"></span>
+  <div id="scMaster" style="display:none; background:rgba(180,83,9,.12); border:2px solid var(--warn); color:var(--warn);
+       border-radius:12px; padding:8px 10px; margin-bottom:8px; text-align:center; font-weight:900; line-height:1.3;">
+    <div style="font-size:12px; font-weight:700;">📌 マスタ品番</div>
+    <div id="scMasterVal" style="font-size:30px; word-break:break-all;"></div>
   </div>
   <div id="dbg">—</div>
 
@@ -227,6 +230,19 @@
   <div class="card" style="padding:10px;">
     <table><tbody id="tally"></tbody></table>
     <div id="rejBox" class="note" style="color:var(--bad);"></div>
+  </div>
+</div>
+
+<!-- ========== 画面ロック（画面は透けて見える。タップは全て無効。長押しで解除） ========== -->
+<div id="lockOverlay" style="position:fixed; inset:0; z-index:900; background:rgba(15,23,42,.45);
+     display:none; flex-direction:column; align-items:center; justify-content:flex-end; padding:0 24px 90px;
+     touch-action:none; -webkit-user-select:none; user-select:none;">
+  <div style="color:#fff; font-size:20px; font-weight:800; margin-bottom:10px; text-shadow:0 1px 4px rgba(0,0,0,.6);">🔒 ロック中（読取は動きます）</div>
+  <div style="position:relative; width:100%; max-width:360px; overflow:hidden; border-radius:12px; background:#fff;"
+       onpointerdown="lockPressStart()" onpointerup="lockPressEnd()" onpointercancel="lockPressEnd()" onpointerleave="lockPressEnd()"
+       oncontextmenu="return false;">
+    <div id="lockBar" style="position:absolute; left:0; top:0; bottom:0; width:0; background:rgba(37,99,235,.35);"></div>
+    <div style="position:relative; padding:18px; text-align:center; font-size:17px; font-weight:800; color:var(--accent);">長押しで解除</div>
   </div>
 </div>
 
@@ -346,7 +362,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.03';   // 更新のたびにここを上げる
+const APP_VERSION = 'v1.04';   // 更新のたびにここを上げる
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbwbBkUT4wBj3-KzIlqrv2IPckprlcryrK-Jom4xcwcyVyK4LzQT2DJ0v8se-p1Bq58pDQ/exec';
 
 const QR_MIN = 63, QR_MAX = 350;
@@ -601,11 +617,35 @@ function updateMasterBadge(){
   if (!el) return;
   if (pending && pending.master && pending.master.type === 'hinban'){
     el.style.display = '';
-    el.textContent = '📌マスタ:' + pending.master.hinban;
+    document.getElementById('scMasterVal').textContent = pending.master.hinban;
   } else {
     el.style.display = 'none';
-    el.textContent = '';
+    document.getElementById('scMasterVal').textContent = '';
   }
+}
+
+/* ================= 画面ロック（ポケット内の誤タップ防止） ================= */
+// ロック中も、Bluetoothスキャナ／カメラの読取は通常どおり動く。解除は「長押し」でのみ可能。
+let lockTimer = null;
+function nativeLock(on){ try { if (window.NyukoLock) window.NyukoLock.setLocked(on); } catch(e){} }
+function lockScreen(){
+  document.getElementById('lockOverlay').style.display = 'flex';
+  nativeLock(true);
+}
+function unlockScreen(){
+  document.getElementById('lockOverlay').style.display = 'none';
+  nativeLock(false);
+  const bar = document.getElementById('lockBar'); if (bar) bar.style.width = '0';
+}
+function lockPressStart(){
+  const bar = document.getElementById('lockBar');
+  bar.style.transition = 'width 1.2s linear'; bar.style.width = '100%';
+  lockTimer = setTimeout(function(){ lockTimer = null; unlockScreen(); }, 1200);
+}
+function lockPressEnd(){
+  if (lockTimer){ clearTimeout(lockTimer); lockTimer = null; }
+  const bar = document.getElementById('lockBar');
+  bar.style.transition = 'none'; bar.style.width = '0';
 }
 function continueScan(){ ldel(K_PENDING); pending = null; enterScanScreen(); }
 

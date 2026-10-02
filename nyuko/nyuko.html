@@ -362,7 +362,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.09';   // 更新のたびにここを上げる
+const APP_VERSION = 'v1.11';   // 更新のたびにここを上げる
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbwbBkUT4wBj3-KzIlqrv2IPckprlcryrK-Jom4xcwcyVyK4LzQT2DJ0v8se-p1Bq58pDQ/exec';
 
 const QR_MIN = 63, QR_MAX = 350;
@@ -412,7 +412,8 @@ let scanSeq = 0;
 let currentMode = 'normal';                // 'normal' | 'karaburi' | 'hamidasi'（紙のモードQRで切り替わる）
 
 function rebuildQrSeen(){
-  qrSeen = new Set((pending && pending.scans ? pending.scans : []).map(s => s.qr));
+  qrSeen = new Set((pending && pending.scans ? pending.scans : [])
+    .filter(s => s.mode !== 'karaburi' && MODE_GROUP_A.indexOf(s.mode) === -1).map(s => s.qr));
 }
 
 /* ================= 画面遷移 ================= */
@@ -939,8 +940,8 @@ function onDecode(raw){
   const karaburi = (pending.mode === 'karaburi');
 
   // ②同一札の重複スキャン（緊急OFF・エリアコード中・karaburi中はスキップ。hamidasi中は必ずチェックする）。
-  // 特殊QR・マスタ読取は重複チェックの対象にしない。
-  if (!manualBypass && !area && !karaburi && qrSeen.has(raw)){
+  // 特殊QR・マスタ読取（マスタ未設定のときの1枚目）は重複チェックの対象にしない。チェックするのは現品側の読取だけ。
+  if (!manualBypass && !area && !karaburi && master && qrSeen.has(raw)){
     rejCounts.dup++;
     reject('dup', '重複エラー：この札は読み取り済みです。再スキャンしないでください');
     return;
@@ -985,7 +986,8 @@ function onDecode(raw){
            + '/' + deviceId() + '-' + (++scanSeq);
   pending.scans.push({ ts: ts, qr: raw, hinban: hinban, youbun: youbun, mode: currentMode,
                        masterQr: area ? area : (master ? master.qr : ''), masterHinban: area ? area : (master ? master.hinban : ''), result: '一致' });
-  qrSeen.add(raw);
+  // damu系・karaburiの間に受理した札は重複チェックの記録に入れない（解除後に同じ札を通常で読んでも止めない。aia仕様）
+  if (!area && !karaburi) qrSeen.add(raw);
   if (karaburi){ pending.master = null; pending.mode = 'normal'; } // karaburiは1組受理したら通常に戻る（aia仕様）
   // 通常の一致ではマスタをそのまま維持する → 同じマスタに対して続けて何枚でも現品を読める（aia仕様）
   lset(K_PENDING, pending);

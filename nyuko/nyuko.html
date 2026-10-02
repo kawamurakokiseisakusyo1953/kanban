@@ -346,7 +346,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.02';   // 更新のたびにここを上げる
+const APP_VERSION = 'v1.03';   // 更新のたびにここを上げる
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbwbBkUT4wBj3-KzIlqrv2IPckprlcryrK-Jom4xcwcyVyK4LzQT2DJ0v8se-p1Bq58pDQ/exec';
 
 const QR_MIN = 63, QR_MAX = 350;
@@ -397,7 +397,6 @@ let currentMode = 'normal';                // 'normal' | 'karaburi' | 'hamidasi'
 
 function rebuildQrSeen(){
   qrSeen = new Set((pending && pending.scans ? pending.scans : []).map(s => s.qr));
-  if (pending && pending.master && pending.master.type === 'hinban' && pending.master.qr) qrSeen.add(pending.master.qr);
 }
 
 /* ================= 画面遷移 ================= */
@@ -918,9 +917,15 @@ function onDecode(raw){
     isKaraburiOneShot = (master.code === 'karaburi'); // karaburiのみ使い切り。グループAは居座る
   } else if (!master){
     // マスタ未設定 → この1枚をマスタとして記憶し、比較用の次の1枚を待つ
+    // マスタ読取は重複チェック（qrSeen）・読取枚数の対象にしない。送信ログ用にだけ別枠で記録する。
     pending.master = { type:'hinban', hinban: hinban, qr: raw };
+    const md = new Date();
+    (pending.masterLog = pending.masterLog || []).push({
+      ts: fmtDate(md) + ' ' + md.toTimeString().slice(0,8) + '.' + String(md.getMilliseconds()).padStart(3,'0')
+          + '/' + deviceId() + '-' + (++scanSeq),
+      qr: raw, hinban: hinban, mode: 'master'
+    });
     lset(K_PENDING, pending);
-    qrSeen.add(raw);
     syncModeFromMaster();
     flash('ok', 'マスタ');
     showResult('ok', '📌 マスタを読み取りました（品番: ' + esc(hinban) + '）\n続けて同じ現品のかんばんを読み取ってください');
@@ -933,7 +938,6 @@ function onDecode(raw){
 
   if (!matched){
     rejCounts.master++;
-    qrSeen.add(raw);
     const masterLabel = (master && master.type === 'hinban') ? master.hinban : (master ? (MODE_LABEL[master.code] || master.code) : '(なし)');
     const box = document.getElementById('rejBox');
     box.textContent = '弾いた累計：重複 ' + rejCounts.dup + ' / 不一致 ' + rejCounts.master + ' / 形式 ' + rejCounts.format;
@@ -1309,6 +1313,9 @@ function buildRows(){
         hakai: (isLast && ex.hakai) ? ex.hakai : ''
       });
     });
+  });
+  (pending.masterLog || []).forEach(m => {
+    rows.push({ ts: m.ts, qr: m.qr, hinban: m.hinban, mode: 'master', hasuu: '', hakai: '' });
   });
   return rows;
 }

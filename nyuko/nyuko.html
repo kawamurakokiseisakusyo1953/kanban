@@ -190,9 +190,13 @@
 <div class="screen" id="s-scan">
   <div class="hd">
     <span class="badge tap" id="scStaff" onclick="confirmSwitchStaff()">—</span>
-    <span class="badge" id="scMode">通常</span>
     <span class="badge tap" onclick="lockScreen()">🔒ロック</span>
     <span class="badge tap" onclick="openRecoveryQr()">🔧</span>
+  </div>
+  <div id="scModeBand" style="text-align:center; border-radius:12px; padding:8px 10px; margin-bottom:8px; font-weight:900; border:2px solid var(--line); background:var(--line); color:var(--txt);">
+    <div style="font-size:12px; font-weight:700; opacity:.85;">モード</div>
+    <div id="scMode" style="font-size:30px; line-height:1.2; word-break:break-all;">通常</div>
+    <div id="scModeSub" style="font-size:12px; font-weight:700;">マスタ→現品（2段階読取）</div>
   </div>
   <div id="scMaster" style="display:none; background:rgba(180,83,9,.12); border:2px solid var(--warn); color:var(--warn);
        border-radius:12px; padding:8px 10px; margin-bottom:8px; text-align:center; font-weight:900; line-height:1.3;">
@@ -362,7 +366,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.16';   // 更新のたびにここを上げる
+const APP_VERSION = 'v1.19';   // 更新のたびにここを上げる
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbyMZEogfrGCsH-joO1oBN0GST7GA_3wUwYdJ1ciomnJQ7Nh8NBs9SiTkrCmcrsmdArkGQ/exec';
 
 const QR_MIN = 63, QR_MAX = 350;
@@ -611,8 +615,15 @@ function syncModeFromMaster(){
 }
 function updateModeBadge(){
   const el = document.getElementById('scMode');
+  const band = document.getElementById('scModeBand');
+  const sub = document.getElementById('scModeSub');
   el.textContent = MODE_LABEL[currentMode] || currentMode; // グループAコードなど訳語が無いものは原文表示
-  el.className = 'badge' + (currentMode === 'karaburi' ? ' mode-karaburi' : currentMode === 'hamidasi' ? ' mode-hamidasi' : '');
+  let bg = 'var(--line)', fg = 'var(--txt)', bd = 'var(--line)', note = 'マスタ→現品（2段階読取）';
+  if (currentMode === 'karaburi'){ bg = 'rgba(180,83,9,.18)'; fg = 'var(--warn)'; bd = 'var(--warn)'; note = '現品を1回読む（1枚で通常に戻る）'; }
+  else if (currentMode === 'hamidasi'){ bg = 'rgba(37,99,235,.18)'; fg = 'var(--accent)'; bd = 'var(--accent)'; note = '現品を1回読む（kaizyoで解除）'; }
+  else if (currentMode !== 'normal'){ bg = 'rgba(124,58,237,.16)'; fg = '#6d28d9'; bd = '#7c3aed'; note = '現品を1回読む（kaizyoで解除）'; }
+  band.style.background = bg; band.style.color = fg; band.style.borderColor = bd;
+  sub.textContent = note;
 }
 function updateMasterBadge(){
   const el = document.getElementById('scMaster');
@@ -986,6 +997,7 @@ function onDecode(raw){
   const ts = fmtDate(d) + ' ' + d.toTimeString().slice(0,8)
            + '.' + String(d.getMilliseconds()).padStart(3,'0')
            + '/' + deviceId() + '-' + (++scanSeq);
+  pushUndo_('scan');
   pending.scans.push({ ts: ts, qr: raw, hinban: hinban, youbun: youbun, mode: currentMode,
                        masterQr: area || (karaburi ? 'karaburi' : (hamidasi ? 'hamidasi' : (master ? master.qr : ''))), masterHinban: area || (karaburi ? 'karaburi' : (hamidasi ? 'hamidasi' : (master ? master.hinban : ''))), result: '一致' });
   // damu系・karaburiの間に受理した札は重複チェックの記録に入れない（解除後に同じ札を通常で読んでも止めない。aia仕様）
@@ -1003,6 +1015,12 @@ function onDecode(raw){
   if (document.getElementById('vibOn').checked && navigator.vibrate) navigator.vibrate(350);
   renderTally();
 }
+// 取消用の操作履歴。現品の受理・特殊QRの切替の「直前の状態（モード・マスタ）」を覚えておき、直前取消で元に戻す。
+function pushUndo_(kind){
+  const st = (pending.undoStack = pending.undoStack || []);
+  st.push({ kind: kind, prevMode: pending.mode || 'normal', prevMaster: pending.master || null });
+  if (st.length > 500) st.shift();
+}
 // 数えない記録（不一致）を、送信ログと履歴に残す。重複チェック（qrSeen）には入れない。
 function logRow_(r){
   const d = new Date();
@@ -1019,10 +1037,12 @@ function handleModeQr(code){
 
   if (MODE_GROUP_B.indexOf(code) === -1){
     // kaizyo / karaburi / hamidasi / グループA：モード切替（グループAは以降、マスタなしの1段階読取）
+    pushUndo_('mode');
     pending.mode = (code === 'kaizyo') ? 'normal' : code;
     pending.master = null;
     lset(K_PENDING, pending);
     syncModeFromMaster();
+    updateUndoBtn();
     const label = MODE_LABEL[pending.mode] || pending.mode;
     flash('ok', label);
     const oneStep = (code === 'karaburi' || code === 'hamidasi' || MODE_GROUP_A.indexOf(code) !== -1);
@@ -1036,6 +1056,7 @@ function handleModeQr(code){
   const ts = fmtDate(d) + ' ' + d.toTimeString().slice(0,8)
            + '.' + String(d.getMilliseconds()).padStart(3,'0')
            + '/' + deviceId() + '-' + (++scanSeq);
+  pushUndo_('scan');
   pending.scans.push({ ts: ts, qr: code, hinban: code, youbun: 0, mode: code,
                        masterQr: code, masterHinban: code, result: '一致' });
   pending.master = null;
@@ -1072,24 +1093,58 @@ function closeMismatchOverlay(){
 
 /* ================= 取消 ================= */
 function undoLast(){
-  if (!pending || !pending.scans.length) return;
+  if (!pending) return;
+  const stack = (pending.undoStack = pending.undoStack || []);
+  // 確認画面で削除済みなどで無効になった「現品」の履歴は捨てる
+  while (stack.length && stack[stack.length - 1].kind === 'scan' && !pending.scans.length) stack.pop();
+  let top = stack[stack.length - 1];
+  const fromStack = !!top;
+  if (!top){
+    if (!pending.scans.length) return;
+    top = { kind: 'scan', prevMode: pending.mode || 'normal', prevMaster: pending.master || null }; // 旧データ（履歴なし）の互換
+  }
+  const restore = function(){
+    if (fromStack) stack.pop();
+    pending.mode = top.prevMode || 'normal';
+    pending.master = top.prevMaster || null;
+  };
+
+  if (top.kind === 'mode'){
+    const from = MODE_LABEL[pending.mode] || pending.mode;
+    const to = MODE_LABEL[top.prevMode || 'normal'] || top.prevMode;
+    showConfirm('特殊QRの切替を取り消します。
+モード「' + from + '」→「' + to + '」に戻します。
+よろしいですか？', function(){
+      restore();
+      lset(K_PENDING, pending);
+      syncModeFromMaster();
+      updateUndoBtn();
+      showResult('ok', '↩ モードを「' + esc(to) + '」に戻しました');
+    });
+    return;
+  }
+
   const last = pending.scans[pending.scans.length - 1];
-  showConfirm('直前の読取を取り消します。\n品番: ' + scanKey(last) + '\nよろしいですか？', function(){
+  showConfirm('直前の読取を取り消します。
+品番: ' + scanKey(last) + '
+よろしいですか？', function(){
     pending.scans.pop();
-    qrSeen.delete(last.qr);
+    restore();
+    rebuildQrSeen();
     const lk = scanKey(last);
     const stillHas = pending.scans.some(s => scanKey(s) === lk);
     if (!stillHas) delete pending.extra[lk];
     lset(K_PENDING, pending);
+    syncModeFromMaster();
     renderTally();
     refreshResultForLastHinban();
   });
 }
 function updateUndoBtn(){
   const btn = document.getElementById('btnUndo');
-  const has = !!(pending && pending.scans && pending.scans.length);
+  const has = !!(pending && ((pending.scans && pending.scans.length) || (pending.undoStack && pending.undoStack.length)));
   btn.disabled = !has;
-  document.getElementById('btnExtra').disabled = !has;
+  document.getElementById('btnExtra').disabled = !(pending && pending.scans && pending.scans.length);
 }
 
 /* ================= タリー ================= */
@@ -1345,6 +1400,8 @@ function buildRows(){
     rows.push({ ts: m.ts, masterQr: m.masterQr || '', masterHinban: m.masterHinban || '', qr: m.qr, hinban: m.hinban,
                 result: m.result || '', mode: m.mode, hasuu: '', hakai: '' });
   });
+  // 読み取った順（日時の文字列。端末IDと連番付きで一意）に並べて送る。
+  rows.sort((a, b) => a.ts < b.ts ? -1 : (a.ts > b.ts ? 1 : 0));
   return rows;
 }
 function doSend(){

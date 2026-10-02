@@ -224,6 +224,7 @@
   <div class="hd">
     <span class="badge tap" id="scMaker" onclick="confirmSwitchMaker()">—</span>
     <span class="badge tap" id="scDate" onclick="backToDate()">—</span>
+    <span class="badge tap" onclick="lockScreen()">🔒ロック</span>
     <span class="badge tap" onclick="openRecoveryQr()">🔧</span>
   </div>
   <div id="dbg">—</div>
@@ -356,6 +357,19 @@
   </div>
 </div>
 
+<!-- 画面ロック（ポケット内の誤タップ防止）。画面は透けて見え、タップは全て無効。長押しで解除。読取は動く。 -->
+<div id="lockOverlay" style="position:fixed; inset:0; z-index:900; background:rgba(15,23,42,.45);
+     display:none; flex-direction:column; align-items:center; justify-content:flex-end; padding:0 24px 90px;
+     touch-action:none; -webkit-user-select:none; user-select:none;">
+  <div style="color:#fff; font-size:20px; font-weight:800; margin-bottom:10px; text-shadow:0 1px 4px rgba(0,0,0,.6);">🔒 ロック中（読取は動きます）</div>
+  <div style="position:relative; width:100%; max-width:360px; overflow:hidden; border-radius:12px; background:#fff;"
+       onpointerdown="lockPressStart()" onpointerup="lockPressEnd()" onpointercancel="lockPressEnd()" onpointerleave="lockPressEnd()"
+       oncontextmenu="return false;">
+    <div id="lockBar" style="position:absolute; left:0; top:0; bottom:0; width:0; background:rgba(37,99,235,.35);"></div>
+    <div style="position:relative; padding:18px; text-align:center; font-size:17px; font-weight:800; color:var(--accent);">長押しで解除</div>
+  </div>
+</div>
+
 <!-- スキャナのBluetoothモードが崩れた時の復旧用QR。紙を探さなくてもここに表示して
      スキャナ本体に読ませられる（画像として埋め込み済みなのでオフラインでも表示できる）。 -->
 <div class="modal-overlay" id="recoveryQrOverlay" onclick="closeRecoveryQr()">
@@ -369,7 +383,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.61';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
+const APP_VERSION = 'v1.62';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzALEt3uPha_JbW7USYz8Q3TJnbg9gJauFe9yTEC3KqPrIqChkBLb-Tj0kt5WjqlMor/exec';
 
 const MAKERS_FALLBACK = ['大澤熔接工業所','清国溶接','小山製作所','山田鉄工所','丸磯工業所','花木製作所','羽谷工業所','伊藤プレス','メタルクリーン','マルマツ','ウエルギコウ','松原工業所','安井鉄工所','真鍋工業','向井工作所','大動工業','アクトメタル','日本グラス','エバー','トライ','村田工業所','檜山技研工業所','加藤技研工業所','トヨアケメッキ','福洋精工'];
@@ -580,6 +594,26 @@ function logout(){
 // スキャン画面のメーカーバッジから：ログイン画面に戻る（＝メーカー切替の入口）。読取中データは保持される。
 function confirmSwitchMaker(){
   showConfirm('ログイン画面に戻ります（メーカーを切り替えられます）。\n読取中のデータは保持されます。よろしいですか？', logout);
+}
+// 画面ロック：ポケットへの出し入れでボタンを誤タップしないよう、タップを全て無効にする。解除は長押しのみ。
+// ロック中もスキャナ／カメラの読取は通常どおり動く。
+let lockTimer = null;
+function lockScreen(){
+  document.getElementById('lockOverlay').style.display = 'flex';
+}
+function unlockScreen(){
+  document.getElementById('lockOverlay').style.display = 'none';
+  const bar = document.getElementById('lockBar'); if (bar) bar.style.width = '0';
+}
+function lockPressStart(){
+  const bar = document.getElementById('lockBar');
+  bar.style.transition = 'width 1.2s linear'; bar.style.width = '100%';
+  lockTimer = setTimeout(function(){ lockTimer = null; unlockScreen(); }, 1200);
+}
+function lockPressEnd(){
+  if (lockTimer){ clearTimeout(lockTimer); lockTimer = null; }
+  const bar = document.getElementById('lockBar');
+  bar.style.transition = 'none'; bar.style.width = '0';
 }
 // 納入日選択画面のログアウトボタンから：誤タップで即ログアウトされないよう確認を挟む。
 function confirmLogoutFromDate(){

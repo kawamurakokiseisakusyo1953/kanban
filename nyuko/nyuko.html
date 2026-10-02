@@ -362,7 +362,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.08';   // 更新のたびにここを上げる
+const APP_VERSION = 'v1.09';   // 更新のたびにここを上げる
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbwbBkUT4wBj3-KzIlqrv2IPckprlcryrK-Jom4xcwcyVyK4LzQT2DJ0v8se-p1Bq58pDQ/exec';
 
 const QR_MIN = 63, QR_MAX = 350;
@@ -375,8 +375,8 @@ const REFOCUS_EVERY_FRAMES = 6;
 // 特殊QRを読んでも「マスタ→現品」の2段階読取は変わらない（照合は省略しない）。読み取った特殊QRは
 // 送信ログ・履歴に残すが、重複チェックの対象にはしない。以降に受理した現品には、そのモードを記録する。
 // kaizyo   = 通常モードに戻す
-// karaburi = 空箱モード（現品に「空箱」と記録される）
-// hamidasi = はみ出しモード（現品に「はみ出し」と記録される）
+// karaburi = 空箱モード（マスタ→現品の1組を受理するまで重複チェックなし。受理したら通常に戻る）
+// hamidasi = はみ出しモード（現品に「はみ出し」と記録される。重複チェックは通常どおり行う）
 // グループA = エリアコード（現品にそのコードが記録される）。kaizyoで解除するまで続く
 // グループB = 単独で完結するイベント記録。読み取った瞬間に1件だけ記録する
 const MODE_GROUP_A = ['1-1damu','1-2barasi','1-2damu','2-1damu','3-1damu','3-2damu','5-1damu','5-2damu',
@@ -935,8 +935,12 @@ function onDecode(raw){
   // この間、出力のマスタQR・マスタ品番にはそのコードが入る（aia仕様）。
   const area = (MODE_GROUP_A.indexOf(pending.mode) !== -1) ? pending.mode : null;
 
-  // ②同一札の重複スキャン（緊急OFF・エリアコード中はスキップ）。特殊QR・マスタ読取は重複チェックの対象にしない。
-  if (!manualBypass && !area && qrSeen.has(raw)){
+  // karaburi（空箱）を読んだ後は、マスタ→現品の1組が受理されるまで（1回使い切り）重複チェックをスキップする（aia仕様）。
+  const karaburi = (pending.mode === 'karaburi');
+
+  // ②同一札の重複スキャン（緊急OFF・エリアコード中・karaburi中はスキップ。hamidasi中は必ずチェックする）。
+  // 特殊QR・マスタ読取は重複チェックの対象にしない。
+  if (!manualBypass && !area && !karaburi && qrSeen.has(raw)){
     rejCounts.dup++;
     reject('dup', '重複エラー：この札は読み取り済みです。再スキャンしないでください');
     return;
@@ -982,6 +986,7 @@ function onDecode(raw){
   pending.scans.push({ ts: ts, qr: raw, hinban: hinban, youbun: youbun, mode: currentMode,
                        masterQr: area ? area : (master ? master.qr : ''), masterHinban: area ? area : (master ? master.hinban : ''), result: '一致' });
   qrSeen.add(raw);
+  if (karaburi){ pending.master = null; pending.mode = 'normal'; } // karaburiは1組受理したら通常に戻る（aia仕様）
   // 通常の一致ではマスタをそのまま維持する → 同じマスタに対して続けて何枚でも現品を読める（aia仕様）
   lset(K_PENDING, pending);
   syncModeFromMaster();

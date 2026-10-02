@@ -362,7 +362,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.11';   // 更新のたびにここを上げる
+const APP_VERSION = 'v1.12';   // 更新のたびにここを上げる
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbwbBkUT4wBj3-KzIlqrv2IPckprlcryrK-Jom4xcwcyVyK4LzQT2DJ0v8se-p1Bq58pDQ/exec';
 
 const QR_MIN = 63, QR_MAX = 350;
@@ -375,7 +375,7 @@ const REFOCUS_EVERY_FRAMES = 6;
 // 特殊QRを読んでも「マスタ→現品」の2段階読取は変わらない（照合は省略しない）。読み取った特殊QRは
 // 送信ログ・履歴に残すが、重複チェックの対象にはしない。以降に受理した現品には、そのモードを記録する。
 // kaizyo   = 通常モードに戻す
-// karaburi = 空箱モード（マスタ→現品の1組を受理するまで重複チェックなし。受理したら通常に戻る）
+// karaburi = カラブリ（「カラブリ→現品」の1段階読取。1枚受理したら通常に戻る。重複チェックなし）
 // hamidasi = はみ出しモード（現品に「はみ出し」と記録される。重複チェックは通常どおり行う）
 // グループA = エリアコード（現品にそのコードが記録される）。kaizyoで解除するまで続く
 // グループB = 単独で完結するイベント記録。読み取った瞬間に1件だけ記録する
@@ -384,7 +384,7 @@ const MODE_GROUP_A = ['1-1damu','1-2barasi','1-2damu','2-1damu','3-1damu','3-2da
 const MODE_GROUP_B = ['daisya','sonota','1f2fid','zisouh','3fokib','hannyu','chudan','rainse',
                        'qctymt','zkkkkk','hinsit','rainch'];
 const MODE_CODES = ['kaizyo', 'karaburi', 'hamidasi'].concat(MODE_GROUP_A, MODE_GROUP_B);
-const MODE_LABEL = { normal:'通常', karaburi:'空箱', hamidasi:'はみ出し' };
+const MODE_LABEL = { normal:'通常', karaburi:'カラブリ', hamidasi:'はみ出し' };
 
 const K_AUTH = 'nyu_auth', K_PENDING = 'nyu_pending', K_HIST = 'nyu_history', K_DEV = 'nyu_device';
 const K_CAMOFF = 'nyu_cam_off';
@@ -936,7 +936,7 @@ function onDecode(raw){
   // この間、出力のマスタQR・マスタ品番にはそのコードが入る（aia仕様）。
   const area = (MODE_GROUP_A.indexOf(pending.mode) !== -1) ? pending.mode : null;
 
-  // karaburi（空箱）を読んだ後は、マスタ→現品の1組が受理されるまで（1回使い切り）重複チェックをスキップする（aia仕様）。
+  // カラブリ（karaburi）を読んだ後は「カラブリ→現品」の1段階読取。現品を1枚受理したら通常に戻る（1回使い切り）。この1枚は重複チェックもしない（aia仕様）。
   const karaburi = (pending.mode === 'karaburi');
 
   // ②同一札の重複スキャン（緊急OFF・エリアコード中・karaburi中はスキップ。hamidasi中は必ずチェックする）。
@@ -952,7 +952,7 @@ function onDecode(raw){
 
   // ③マスタ一致判定（特殊QRを読んだ後でも、必ず「マスタ→現品」の2段階読取）
   let matched;
-  if (manualBypass || area){
+  if (manualBypass || area || karaburi){
     matched = true;
   } else if (!master){
     // マスタ未設定 → この1枚をマスタとして記憶し、比較用の次の1枚を待つ
@@ -985,10 +985,10 @@ function onDecode(raw){
            + '.' + String(d.getMilliseconds()).padStart(3,'0')
            + '/' + deviceId() + '-' + (++scanSeq);
   pending.scans.push({ ts: ts, qr: raw, hinban: hinban, youbun: youbun, mode: currentMode,
-                       masterQr: area ? area : (master ? master.qr : ''), masterHinban: area ? area : (master ? master.hinban : ''), result: '一致' });
+                       masterQr: area || (karaburi ? 'karaburi' : (master ? master.qr : '')), masterHinban: area || (karaburi ? 'karaburi' : (master ? master.hinban : '')), result: '一致' });
   // damu系・karaburiの間に受理した札は重複チェックの記録に入れない（解除後に同じ札を通常で読んでも止めない。aia仕様）
   if (!area && !karaburi) qrSeen.add(raw);
-  if (karaburi){ pending.master = null; pending.mode = 'normal'; } // karaburiは1組受理したら通常に戻る（aia仕様）
+  if (karaburi){ pending.master = null; pending.mode = 'normal'; } // カラブリは1枚受理したら通常に戻る（aia仕様）
   // 通常の一致ではマスタをそのまま維持する → 同じマスタに対して続けて何枚でも現品を読める（aia仕様）
   lset(K_PENDING, pending);
   syncModeFromMaster();
@@ -1009,7 +1009,7 @@ function logRow_(r){
   (pending.masterLog = pending.masterLog || []).push(r);
 }
 // モードQR（紙）を読んだ時の処理。読取枚数には含めないが、送信ログ・履歴には残す。重複チェックの対象にはしない。
-// 読んだ後は、karaburi/hamidasi/kaizyoは「マスタ→現品」の2段階読取、グループA（damu系）は「コード→現品」の1段階読取。
+// 読んだ後は、hamidasi/kaizyoは「マスタ→現品」の2段階読取、カラブリ・グループA（damu系）は「コード→現品」の1段階読取。
 // 以降に受理した現品には、このモードが記録される（kaizyoで通常に戻る）。
 function handleModeQr(code){
   const vibOn = document.getElementById('vibOn').checked && navigator.vibrate;
@@ -1024,7 +1024,8 @@ function handleModeQr(code){
     syncModeFromMaster();
     const label = MODE_LABEL[pending.mode] || pending.mode;
     flash('ok', label);
-    showResult('ok', '🔀 モードを「' + esc(label) + '」に切り替えました（続けてマスタ→現品の順に読んでください）');
+    const oneStep = (code === 'karaburi' || MODE_GROUP_A.indexOf(code) !== -1);
+    showResult('ok', '🔀 モードを「' + esc(label) + '」に切り替えました（' + (oneStep ? '続けて現品を読んでください' : '続けてマスタ→現品の順に読んでください') + '）');
     if (vibOn) navigator.vibrate(500);
     return;
   }

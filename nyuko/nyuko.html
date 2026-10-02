@@ -39,7 +39,7 @@
   button[disabled] { opacity:.4; }
   .full { width:100%; flex:none; margin-top:8px; }
 
-  .camwrap { position:relative; width:100%; aspect-ratio:2.4/1; background:#000; border-radius:14px; overflow:hidden; margin-bottom:6px; }
+  .camwrap { position:relative; width:100%; aspect-ratio:1.8/1; background:#000; border-radius:14px; overflow:hidden; margin-bottom:6px; }
   .camwrap.native-cam { background:transparent; }
   .camwrap.native-cam #v { display:none; }
   .guide { position:absolute; inset:12% ; border:3px solid rgba(255,255,255,.85); border-radius:12px;
@@ -194,7 +194,7 @@
     <span class="badge tap" onclick="openRecoveryQr()">🔧</span>
   </div>
   <div id="scModeBand" style="text-align:center; border-radius:12px; padding:3px 10px 4px; margin-bottom:6px; font-weight:900; border:2px solid var(--line); background:var(--line); color:var(--txt);">
-    <div id="scMode" style="font-size:28px; line-height:1.15; word-break:break-all;">通常</div>
+    <div id="scMode" style="font-size:28px; line-height:1.15; word-break:break-all;">入庫</div>
     <div id="scModeSub" style="font-size:11px; font-weight:700; line-height:1.2;">マスタ→現品（2段階読取）</div>
   </div>
   <div id="scMaster" style="display:none; background:rgba(180,83,9,.12); border:2px solid var(--warn); color:var(--warn);
@@ -365,7 +365,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.25';   // 更新のたびにここを上げる
+const APP_VERSION = 'v1.27';   // 更新のたびにここを上げる
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbyMZEogfrGCsH-joO1oBN0GST7GA_3wUwYdJ1ciomnJQ7Nh8NBs9SiTkrCmcrsmdArkGQ/exec';
 
 const QR_MIN = 63, QR_MAX = 350;
@@ -387,7 +387,7 @@ const MODE_GROUP_A = ['1-1damu','1-2barasi','1-2damu','2-1damu','3-1damu','3-2da
 const MODE_GROUP_B = ['daisya','sonota','1f2fid','zisouh','3fokib','hannyu','chudan','rainse',
                        'qctymt','zkkkkk','hinsit','rainch'];
 const MODE_CODES = ['kaizyo', 'karaburi', 'hamidasi'].concat(MODE_GROUP_A, MODE_GROUP_B);
-const MODE_LABEL = { normal:'通常', karaburi:'カラブリ', hamidasi:'はみ出し' };
+const MODE_LABEL = { normal:'入庫', karaburi:'カラブリ', hamidasi:'はみ出し' };
 
 const K_AUTH = 'nyu_auth', K_PENDING = 'nyu_pending', K_HIST = 'nyu_history', K_DEV = 'nyu_device';
 const K_CAMOFF = 'nyu_cam_off';
@@ -618,7 +618,7 @@ function updateModeBadge(){
   const sub = document.getElementById('scModeSub');
   el.textContent = MODE_LABEL[currentMode] || currentMode; // グループAコードなど訳語が無いものは原文表示
   let bg = 'var(--line)', fg = 'var(--txt)', bd = 'var(--line)', note = 'マスタ→現品（2段階読取）';
-  if (currentMode === 'karaburi'){ bg = 'rgba(180,83,9,.18)'; fg = 'var(--warn)'; bd = 'var(--warn)'; note = '現品を1回読む（1枚で通常に戻る）'; }
+  if (currentMode === 'karaburi'){ bg = 'rgba(180,83,9,.18)'; fg = 'var(--warn)'; bd = 'var(--warn)'; note = '現品を1回読む（1枚で入庫に戻る）'; }
   else if (currentMode === 'hamidasi'){ bg = 'rgba(37,99,235,.18)'; fg = 'var(--accent)'; bd = 'var(--accent)'; note = '現品を1回読む（kaizyoで解除）'; }
   else if (currentMode !== 'normal'){ bg = 'rgba(124,58,237,.16)'; fg = '#6d28d9'; bd = '#7c3aed'; note = '現品を1回読む（kaizyoで解除）'; }
   band.style.background = bg; band.style.color = fg; band.style.borderColor = bd;
@@ -1096,7 +1096,7 @@ function closeMismatchOverlay(){
 
 /* ================= 取消 ================= */
 function undoModeLabel_(m){
-  if (!m || m === 'normal') return '通常';
+  if (!m || m === 'normal') return '入庫';
   if (MODE_GROUP_B.indexOf(m) !== -1) return '単独イベント（' + m + '）';
   return MODE_LABEL[m] || m;
 }
@@ -1114,7 +1114,7 @@ function undoLast(){
 
   if (top.kind === 'mode'){
     // 特殊QRの切替を取り消すと、必ず「通常」に戻る（マスタも未設定）
-    showConfirm('【特殊QRの切替】を取り消します。\n今のモード: ' + undoModeLabel_(pending.mode) + '\n取り消すと「通常」に戻ります。\nよろしいですか？', function(){
+    showConfirm('【特殊QRの切替】を取り消します。\n今のモード: ' + undoModeLabel_(pending.mode) + '\n取り消すと「入庫」に戻ります。\nよろしいですか？', function(){
       if (fromStack) stack.pop();
       pending.mode = 'normal';
       pending.master = null;
@@ -1122,7 +1122,7 @@ function undoLast(){
       lset(K_PENDING, pending);
       syncModeFromMaster();
       updateUndoBtn();
-      showResult('ok', '↩ モードを「通常」に戻しました');
+      showResult('ok', '↩ モードを「入庫」に戻しました');
     });
     return;
   }
@@ -1139,7 +1139,7 @@ function undoLast(){
   if (emptied && active && pending.master && pending.master.type === 'hinban') together.push('マスタ: ' + pending.master.hinban);
   if (modeEntry) together.push('特殊QR: ' + undoModeLabel_(modeEntry.code));
   showConfirm('【読取】を取り消します。\n品番: ' + last.hinban + '\nモード: ' + undoModeLabel_(last.mode) + '\n読取時刻: ' + hhmmss
-    + (together.length ? '\n\n一緒に消えるもの\n　' + together.join('\n　') + '\n→ 通常に戻ります' : '')
+    + (together.length ? '\n\n一緒に消えるもの\n　' + together.join('\n　') + '\n→ 入庫に戻ります' : '')
     + '\n\nよろしいですか？', function(){
     pending.scans.pop();
     if (fromStack) stack.pop();
@@ -1504,7 +1504,7 @@ function showHistoryDetail(i){
   const evs = (h.events || []).map(function (e) {
     let line;
     if (e.result === '不一致') line = '❌不一致　マスタ:' + esc(e.masterHinban) + ' / 今回:' + esc(e.hinban);
-    else if (e.mode === 'kaizyo') line = '🔀通常に戻す';
+    else if (e.mode === 'kaizyo') line = '🔀入庫に戻す';
     else line = '🔀' + esc(MODE_LABEL[e.mode] || e.mode);
     return '<div class="hist-row-sub">' + esc(String(e.ts).slice(11, 19)) + '　' + line + '</div>';
   }).join('');

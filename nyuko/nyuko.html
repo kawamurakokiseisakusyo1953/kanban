@@ -366,7 +366,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.19';   // 更新のたびにここを上げる
+const APP_VERSION = 'v1.20';   // 更新のたびにここを上げる
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbyMZEogfrGCsH-joO1oBN0GST7GA_3wUwYdJ1ciomnJQ7Nh8NBs9SiTkrCmcrsmdArkGQ/exec';
 
 const QR_MIN = 63, QR_MAX = 350;
@@ -1112,9 +1112,7 @@ function undoLast(){
   if (top.kind === 'mode'){
     const from = MODE_LABEL[pending.mode] || pending.mode;
     const to = MODE_LABEL[top.prevMode || 'normal'] || top.prevMode;
-    showConfirm('特殊QRの切替を取り消します。
-モード「' + from + '」→「' + to + '」に戻します。
-よろしいですか？', function(){
+    showConfirm('特殊QRの切替を取り消します。\nモード「' + from + '」→「' + to + '」に戻します。\nよろしいですか？', function(){
       restore();
       lset(K_PENDING, pending);
       syncModeFromMaster();
@@ -1125,9 +1123,7 @@ function undoLast(){
   }
 
   const last = pending.scans[pending.scans.length - 1];
-  showConfirm('直前の読取を取り消します。
-品番: ' + scanKey(last) + '
-よろしいですか？', function(){
+  showConfirm('直前の読取を取り消します。\n品番: ' + scanKey(last) + '\nよろしいですか？', function(){
     pending.scans.pop();
     restore();
     rebuildQrSeen();

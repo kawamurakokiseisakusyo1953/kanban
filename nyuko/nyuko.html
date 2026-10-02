@@ -362,7 +362,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.04';   // 更新のたびにここを上げる
+const APP_VERSION = 'v1.05';   // 更新のたびにここを上げる
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbwbBkUT4wBj3-KzIlqrv2IPckprlcryrK-Jom4xcwcyVyK4LzQT2DJ0v8se-p1Bq58pDQ/exec';
 
 const QR_MIN = 63, QR_MAX = 350;
@@ -1497,8 +1497,10 @@ function flash(cls, txt){
   const f = document.getElementById('flash');
   f.className = 'flash ' + cls; f.textContent = txt;
   f.style.opacity = '.9';
-  setTimeout(()=>{ f.style.opacity = '0'; }, 130);
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(()=>{ f.style.opacity = '0'; }, cls === 'bad' ? 800 : 400);
 }
+let flashTimer = null;
 
 /* ================= misc ================= */
 function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }

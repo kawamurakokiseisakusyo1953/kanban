@@ -281,7 +281,7 @@
   </div>
   <div class="note" style="margin-bottom:10px;">端数・破壊はタップで入力。「数量」＝ 箱数×収容数＋端数（収容数はQRから自動取得・要確認）。</div>
   <button class="ok full" id="sendBtn" onclick="doSend()">送信（ネット必要）</button>
-  <button class="ghost full" onclick="show('s-scan'); resumeCamera();">← 読取にもどる</button>
+  <button class="ghost full" id="revBackBtn" onclick="show('s-scan'); resumeCamera();">← 読取にもどる</button>
   <div id="err2" style="color:var(--bad);font-size:13px;margin-top:6px;white-space:pre-wrap;"></div>
 </div>
 
@@ -365,7 +365,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.27';   // 更新のたびにここを上げる
+const APP_VERSION = 'v1.29';   // 更新のたびにここを上げる
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbyMZEogfrGCsH-joO1oBN0GST7GA_3wUwYdJ1ciomnJQ7Nh8NBs9SiTkrCmcrsmdArkGQ/exec';
 
 const QR_MIN = 63, QR_MAX = 350;
@@ -659,7 +659,11 @@ function lockPressEnd(){
   const bar = document.getElementById('lockBar');
   bar.style.transition = 'none'; bar.style.width = '0';
 }
-function continueScan(){ ldel(K_PENDING); pending = null; enterScanScreen(); }
+function continueScan(){
+  // 送信後に端末に残っているデータ（万一あれば）は消さない。何も残っていない時だけ空から始める。
+  if (!(pending && ((pending.scans && pending.scans.length) || (pending.masterLog && pending.masterLog.length)))){ ldel(K_PENDING); pending = null; }
+  enterScanScreen();
+}
 
 /* ================= カメラ / デコード（受入QRスキャンと同じ仕組みをそのまま使用） ================= */
 const NATIVE = !!(window.AndroidBridge);
@@ -900,6 +904,7 @@ let rejCounts = { format:0, dup:0, master:0 };
 const REJ_LABEL = { format:'NG', dup:'重複', master:'不一致' };
 
 function scanInputAllowed(){
+  if (sending) return false; // 送信中は読取を受け付けない
   if (!document.getElementById('s-scan').classList.contains('on')) return false;
   const blockerIds = ['modalOverlay', 'extraSheet', 'numpadSheet', 'recoveryQrOverlay'];
   for (const id of blockerIds){
@@ -1431,28 +1436,80 @@ function doSend(){
     err.textContent = 'このデータは担当者「' + pending.staff + '」のものです。一度その担当者を選び直してください。';
     return;
   }
+  if (sending) return;
   btn.disabled = true; btn.textContent = '送信中...';
+  setSending_(true);
   const payload = { staff: pending.staff, rows: buildRows() };
+  const sentTs = new Set(payload.rows.map(r => r.ts)); // 今回送った行（成功したら、この行だけを端末から消す）
   const itemsSnapshot = reviewItems();
   const eventsSnapshot = (pending.masterLog || []).map(m => ({ ts: m.ts, mode: m.mode, hinban: m.hinban, result: m.result || '', masterHinban: m.masterHinban || '' }));
-  fetch(GAS_URL, { method:'POST', headers:{'Content-Type':'text/plain'}, body: JSON.stringify(payload) })
-    .then(r => r.json()).then(res => {
+  sendWithRetry_(payload, btn)
+    .then(res => {
+      setSending_(false);
       btn.disabled = false; btn.textContent = '送信（ネット必要）';
       if (!res.ok){ err.textContent = 'エラー: ' + (res.message || '不明'); return; }
+      // サーバーが書き込んだ行数と、送った行数が違う場合は、念のためデータを消さずに残す。
+      if (res.added !== payload.rows.length){
+        err.textContent = '件数が合いません（送信 ' + payload.rows.length + ' 行／受信 ' + res.added + ' 行）。データは端末に保持しました。管理者に連絡してください。';
+        return;
+      }
       const hist = lget(K_HIST, []);
       hist.unshift({ sentAt: new Date().toISOString(), staff: payload.staff, rows: res.added, items: itemsSnapshot, events: eventsSnapshot });
       lset(K_HIST, hist.slice(0, 200));
-      ldel(K_PENDING); pending = null; qrSeen = new Set();
+      // 送った行だけを消す。返事を待つ間に増えた分（万一あっても）は端末に残す。
+      pending.scans = pending.scans.filter(s => !sentTs.has(s.ts));
+      pending.masterLog = (pending.masterLog || []).filter(m => !sentTs.has(m.ts));
+      pending.undoStack = [];
+      const keepKeys = {};
+      pending.scans.forEach(s => { keepKeys[scanKey(s)] = true; });
+      Object.keys(pending.extra || {}).forEach(k => { if (!keepKeys[k]) delete pending.extra[k]; });
+      if (!pending.scans.length && !pending.masterLog.length){
+        ldel(K_PENDING); pending = null; qrSeen = new Set();
+      } else {
+        lset(K_PENDING, pending); rebuildQrSeen();
+      }
       document.getElementById('doneTitle').textContent = '送信完了';
       document.getElementById('doneBody').innerHTML =
-        payload.staff + '<br>追記 ' + res.added + ' 行';
+        payload.staff + '<br>追記 ' + res.added + ' 行' + (res.already ? '（うち ' + res.already + ' 行は送信済みだったため、二重には入れていません）' : '');
       stopCamera();
       show('s-done');
     })
     .catch(e => {
+      setSending_(false);
       btn.disabled = false; btn.textContent = '送信（ネット必要）';
       err.textContent = '送信できませんでした（通信エラー）。データは保持されています。もう一度お試しください。\n' + e.message;
     });
+}
+// 失敗（混み合い・通信切れ・書き込み確認の失敗）の時は、少し待って自動で送り直す。
+// サーバー側が「既に入っている行は追記しない」ので、何度送り直しても二重にならない。
+const AUTO_RETRY_WAIT = [3000, 8000, 15000];
+function sendWithRetry_(payload, btn){
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const attempt = function (i){
+    return fetch(GAS_URL, { method:'POST', headers:{'Content-Type':'text/plain'}, body: JSON.stringify(payload) })
+      .then(r => r.json())
+      .then(function (res){
+        if (!res.ok && res.retry && i < AUTO_RETRY_WAIT.length){
+          btn.textContent = '混み合っています…自動で再送します（' + (i + 1) + '/' + AUTO_RETRY_WAIT.length + '）';
+          return sleep(AUTO_RETRY_WAIT[i]).then(() => attempt(i + 1));
+        }
+        return res;
+      }, function (e){
+        if (i < AUTO_RETRY_WAIT.length && isOnline()){
+          btn.textContent = '通信を再試行中…（' + (i + 1) + '/' + AUTO_RETRY_WAIT.length + '）';
+          return sleep(AUTO_RETRY_WAIT[i]).then(() => attempt(i + 1));
+        }
+        throw e;
+      });
+  };
+  return attempt(0);
+}
+// 送信中（返事が来るまで）は、読取画面に戻れず、読取も受け付けない（送信の最中に増えたデータが消えるのを防ぐ）。
+let sending = false;
+function setSending_(on){
+  sending = on;
+  const b = document.getElementById('revBackBtn');
+  if (b) b.disabled = on;
 }
 
 /* ================= 読取履歴（送信済み） ================= */

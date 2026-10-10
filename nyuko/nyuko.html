@@ -365,7 +365,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.30';   // 更新のたびにここを上げる
+const APP_VERSION = 'v1.31';   // 更新のたびにここを上げる
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbyMZEogfrGCsH-joO1oBN0GST7GA_3wUwYdJ1ciomnJQ7Nh8NBs9SiTkrCmcrsmdArkGQ/exec';
 
 const QR_MIN = 63, QR_MAX = 350;
@@ -1485,18 +1485,25 @@ function doSend(){
 // 終業時など、多数の端末が一斉に送ると順番待ちになる。回数を多めにし、待ち時間にばらつき（±30%）を付けて、
 // 待っている端末が同じ瞬間に再送して、またぶつかるのを避ける。
 const AUTO_RETRY_WAIT = [3000, 5000, 8000, 12000, 15000, 20000, 25000, 30000];
+// 1回の送信で、応答を待つ最大時間(ms)。電波が不安定で、応答もエラーも返ってこないまま固まるのを防ぐ。
+// 超えたら、その送信を中断して、自動で再送する（サーバー側が重複を見るので、二重にならない）。
+let SEND_TIMEOUT_MS = 45000;
 function sendWithRetry_(payload, btn){
   const sleep = ms => new Promise(r => setTimeout(r, Math.round(ms * (0.7 + Math.random() * 0.6))));
   const attempt = function (i){
-    return fetch(GAS_URL, { method:'POST', headers:{'Content-Type':'text/plain'}, body: JSON.stringify(payload) })
+    const ctl = (typeof AbortController === 'function') ? new AbortController() : null;
+    const timer = setTimeout(function (){ if (ctl) ctl.abort(); }, SEND_TIMEOUT_MS);
+    return fetch(GAS_URL, { method:'POST', headers:{'Content-Type':'text/plain'}, body: JSON.stringify(payload), signal: ctl ? ctl.signal : undefined })
       .then(r => r.json())
       .then(function (res){
+        clearTimeout(timer);
         if (!res.ok && res.retry && i < AUTO_RETRY_WAIT.length){
           btn.textContent = '混み合っています…自動で再送します（' + (i + 1) + '/' + AUTO_RETRY_WAIT.length + '）';
           return sleep(AUTO_RETRY_WAIT[i]).then(() => attempt(i + 1));
         }
         return res;
       }, function (e){
+        clearTimeout(timer);
         if (i < AUTO_RETRY_WAIT.length && isOnline()){
           btn.textContent = '通信を再試行中…（' + (i + 1) + '/' + AUTO_RETRY_WAIT.length + '）';
           return sleep(AUTO_RETRY_WAIT[i]).then(() => attempt(i + 1));

@@ -285,7 +285,7 @@
   </div>
   <div class="note" style="margin-bottom:10px;">端数・破壊はタップで入力。「数量」＝ 箱数×収容数＋端数（収容数はQRから自動取得・要確認）。</div>
   <button class="ok full" id="sendBtn" onclick="doSend()">送信（ネット必要）</button>
-  <button class="ghost full" onclick="updateScanHeader(); show('s-scan'); resumeCamera();">← 読取にもどる</button>
+  <button class="ghost full" id="revBackBtn" onclick="updateScanHeader(); show('s-scan'); resumeCamera();">← 読取にもどる</button>
   <div id="err2" style="color:var(--bad);font-size:13px;margin-top:6px;white-space:pre-wrap;"></div>
 </div>
 
@@ -383,7 +383,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.63';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
+const APP_VERSION = 'v1.64';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzALEt3uPha_JbW7USYz8Q3TJnbg9gJauFe9yTEC3KqPrIqChkBLb-Tj0kt5WjqlMor/exec';
 
 const MAKERS_FALLBACK = ['大澤熔接工業所','清国溶接','小山製作所','山田鉄工所','丸磯工業所','花木製作所','羽谷工業所','伊藤プレス','メタルクリーン','マルマツ','ウエルギコウ','松原工業所','安井鉄工所','真鍋工業','向井工作所','大動工業','アクトメタル','日本グラス','エバー','トライ','村田工業所','檜山技研工業所','加藤技研工業所','トヨアケメッキ','福洋精工'];
@@ -415,6 +415,9 @@ let hinbanSet = null, toriSet = null;
 let qrSeen = new Set();                   // このpending内で既に受理した生QR（2度読み検知用）
 let chosenDate = '';                      // yyyy/MM/dd
 let scanSeq = 0;
+let sending = false;                      // 送信中（戻る・読取・端数入力・削除を受け付けない。送信中に増減したデータが、送信とずれないようにする）
+// 自動再送の待ち時間(ms)。多数の端末が同時に送ると、GASが「混み合い」を返すことがある。落ち着くまで間隔を空けて、自動で再送する（再送しても二重にならない）
+const AUTO_RETRY_WAIT = [3000, 5000, 8000, 12000, 15000, 20000, 25000, 30000];
 let masterFetchStatus = '';               // 'fresh' | 'offline' | 'stale' （納入日画面の小さな注記に使うだけ）
 
 function rebuildQrSeen(){
@@ -743,7 +746,10 @@ function updateScanHeader(){
   document.getElementById('scDate').textContent = date + ' ▾';
 }
 function backToDate(){ stopCamera(); enterDateScreen(); }
-function continueScan(){ ldel(K_PENDING); pending = null; enterDateScreen(); }
+function continueScan(){
+  if (!(pending && pending.scans && pending.scans.length)){ ldel(K_PENDING); pending = null; }   // 送っていない行が残っていれば、残す
+  enterDateScreen();
+}
 // 納入日画面のバナューから「続きを読み取る」：日付選択をやり直さず、そのままスキャン画面へ戻る。
 // （アプリを落として再度開いた場合、既定の納入日候補リストは「今日以降」しか出ないため、
 //   pending保存済みの納入日がリストに無いことがある＝その場合でもここなら確実に戻れる）
@@ -1041,6 +1047,7 @@ const REJ_LABEL = { format:'NG', dup:'重複', tori:'他社', master:'マスタ�
 // 画面遷移中や入力シートを開いている間も裏で繋がったままデータを送ってくることがあるため、
 // ここで弾かないと入力中に意図せず1枚読み取ってしまう。
 function scanInputAllowed(){
+  if (sending) return false;
   if (!document.getElementById('s-scan').classList.contains('on')) return false;
   const blockerIds = ['modalOverlay', 'extraSheet', 'numpadSheet', 'recoveryQrOverlay'];
   for (const id of blockerIds){
@@ -1244,6 +1251,7 @@ function closeExtra(){ document.getElementById('extraSheet').classList.remove('o
 /* ================= 共通テンキー（端数/破壊 の数値入力。生産記録アプリと同じ方式） ================= */
 let numpadBuf = '', numpadCallback = null;
 function openNumpad(title, initial, cb){
+  if (sending) return;
   document.getElementById('numpadTitle').textContent = title;
   numpadBuf = (initial != null && initial !== '') ? String(initial) : '';
   numpadCallback = cb;
@@ -1354,6 +1362,7 @@ function renderReview(){
 }
 // 確認画面から、1品番ぶん（そのスキャン全部）をまるごと削除する
 function deleteHinbanFromReview(h){
+  if (sending) return;
   const cnt = pending.scans.filter(s => s.hinban === h).length;
   showConfirm('品番「' + h + '」を削除します（' + cnt + '枚ぶん）。\nよろしいですか？', function () {
     pending.scans.filter(s => s.hinban === h).forEach(s => qrSeen.delete(s.qr));
@@ -1395,8 +1404,50 @@ function buildRows(){
   });
   return rows;
 }
-function doSend(){
+function setSending_(on){
+  sending = on;
   const btn = document.getElementById('sendBtn');
+  const back = document.getElementById('revBackBtn');
+  btn.disabled = on;
+  btn.textContent = on ? '送信中...' : '送信（ネット必要）';
+  if (back) back.disabled = on;
+}
+// 送信。GASが「混み合い／一時的な失敗(retry)」を返した時や、通信が切れた時は、間隔を空けて自動で再送する。
+// 再送しても、GAS側が「日時＋QR」で重複を見て追記しないので、二重にならない。
+// サーバーが「届いた行数(added)＝送った行数」と返した時だけ成功とする（それ以外は、データを残したまま失敗扱い）。
+function sendWithRetry_(payload, onProgress){
+  return new Promise(function (resolve, reject) {
+    let attempt = 0;
+    function again(why){
+      if (attempt >= AUTO_RETRY_WAIT.length){
+        reject(new Error('自動で再送しましたが、送信できませんでした。（' + why + '）'));
+        return;
+      }
+      const wait = Math.round(AUTO_RETRY_WAIT[attempt] * (0.7 + Math.random() * 0.6));   // ±30%のゆらぎ（端末が一斉に再送しないように）
+      attempt++;
+      onProgress('通信待ち… ' + Math.ceil(wait / 1000) + '秒後に再送（' + attempt + '/' + AUTO_RETRY_WAIT.length + '）');
+      setTimeout(once, wait);
+    }
+    function once(){
+      onProgress(attempt === 0 ? '送信中...' : '送信中...（再試行 ' + attempt + '/' + AUTO_RETRY_WAIT.length + '）');
+      fetch(GAS_URL, { method:'POST', headers:{'Content-Type':'text/plain'}, body: JSON.stringify(payload) })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && res.ok){
+            if (res.added === payload.rows.length){ resolve(res); return; }
+            again('サーバーが記録した行数が一致しません（' + res.added + '/' + payload.rows.length + '）');
+            return;
+          }
+          if (res && res.retry){ again(res.message || '混み合っています'); return; }
+          reject(new Error((res && res.message) || '不明なエラー'));   // 認証エラー等：再送しても直らない
+        })
+        .catch(function (e) { again('通信エラー: ' + (e && e.message ? e.message : e)); });
+    }
+    once();
+  });
+}
+function doSend(){
+  if (sending) return;
   const err = document.getElementById('err2');
   err.textContent = '';
   if (!isOnline()){ err.textContent = 'オフラインです。ネットに繋いでから送信してください。（データは保持されています）'; return; }
@@ -1404,26 +1455,36 @@ function doSend(){
     err.textContent = 'このデータはメーカー「' + pending.maker + '」のものです。一度そのメーカーでログインし直してください。';
     return;
   }
-  btn.disabled = true; btn.textContent = '送信中...';
   const payload = { maker: pending.maker, pw: auth.pw, shukkaDate: pending.shukkaDate, rows: buildRows() };
+  const sentTs = new Set(payload.rows.map(function (r) { return r.ts; }));   // 送った行（成功したら、この行だけを端末から消す）
   const itemsSnapshot = reviewItems();   // pendingを消す前に品番別内訳を保存しておく（履歴用）
-  fetch(GAS_URL, { method:'POST', headers:{'Content-Type':'text/plain'}, body: JSON.stringify(payload) })
-    .then(r => r.json()).then(res => {
-      btn.disabled = false; btn.textContent = '送信（ネット必要）';
-      if (!res.ok){ err.textContent = 'エラー: ' + (res.message || '不明'); return; }
+  const btn = document.getElementById('sendBtn');
+  setSending_(true);
+  sendWithRetry_(payload, function (msg) { btn.textContent = msg; })
+    .then(function (res) {
+      setSending_(false);
       const hist = lget(K_HIST, []);
-      hist.unshift({ sentAt: new Date().toISOString(), maker: payload.maker, shukkaDate: pending.shukkaDate, rows: res.added, items: itemsSnapshot });
+      hist.unshift({ sentAt: new Date().toISOString(), maker: payload.maker, shukkaDate: payload.shukkaDate, rows: res.added, items: itemsSnapshot });
       lset(K_HIST, hist.slice(0, 200));  // 一覧はタップ式で軽いので、少し多めに保持
-      ldel(K_PENDING); pending = null; qrSeen = new Set();
+      // 送った行だけを消す（送っていない行が残っていれば、残す）
+      pending.scans = pending.scans.filter(function (sc) { return !sentTs.has(sc.ts); });
+      if (!pending.scans.length){
+        ldel(K_PENDING); pending = null; qrSeen = new Set();
+      } else {
+        Object.keys(pending.extra).forEach(function (h) {
+          if (!pending.scans.some(function (sc) { return sc.hinban === h; })) delete pending.extra[h];
+        });
+        lset(K_PENDING, pending); rebuildQrSeen();
+      }
       document.getElementById('doneTitle').textContent = '送信完了';
       document.getElementById('doneBody').innerHTML =
         payload.maker + '<br>納入日 ' + payload.shukkaDate + '<br>追記 ' + res.added + ' 行<br><br>納品書アプリ側で「QRデータ取込」してください。';
       stopCamera();
       show('s-done');
     })
-    .catch(e => {
-      btn.disabled = false; btn.textContent = '送信（ネット必要）';
-      err.textContent = '送信できませんでした（通信エラー）。データは保持されています。もう一度お試しください。\n' + e.message;
+    .catch(function (e) {
+      setSending_(false);
+      err.textContent = '送信できませんでした。データは保持されています。通信の良い場所で、もう一度送信してください。\n' + e.message;
     });
 }
 

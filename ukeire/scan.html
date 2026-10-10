@@ -418,6 +418,8 @@ let scanSeq = 0;
 let sending = false;                      // 送信中（戻る・読取・端数入力・削除を受け付けない。送信中に増減したデータが、送信とずれないようにする）
 // 自動再送の待ち時間(ms)。多数の端末が同時に送ると、GASが「混み合い」を返すことがある。落ち着くまで間隔を空けて、自動で再送する（再送しても二重にならない）
 const AUTO_RETRY_WAIT = [3000, 5000, 8000, 12000, 15000, 20000, 25000, 30000];
+// 1回の送信で、応答を待つ最大時間(ms)。電波が不安定で、応答もエラーも返ってこないまま固まるのを防ぐ。超えたら、中断して自動で再送する（再送しても二重にならない）
+let SEND_TIMEOUT_MS = 45000;
 let masterFetchStatus = '';               // 'fresh' | 'offline' | 'stale' （納入日画面の小さな注記に使うだけ）
 
 function rebuildQrSeen(){
@@ -1430,9 +1432,12 @@ function sendWithRetry_(payload, onProgress){
     }
     function once(){
       onProgress(attempt === 0 ? '送信中...' : '送信中...（再試行 ' + attempt + '/' + AUTO_RETRY_WAIT.length + '）');
-      fetch(GAS_URL, { method:'POST', headers:{'Content-Type':'text/plain'}, body: JSON.stringify(payload) })
+      const ctl = (typeof AbortController === 'function') ? new AbortController() : null;
+      const timer = setTimeout(function () { if (ctl) ctl.abort(); }, SEND_TIMEOUT_MS);
+      fetch(GAS_URL, { method:'POST', headers:{'Content-Type':'text/plain'}, body: JSON.stringify(payload), signal: ctl ? ctl.signal : undefined })
         .then(function (r) { return r.json(); })
         .then(function (res) {
+          clearTimeout(timer);
           if (res && res.ok){
             if (res.added === payload.rows.length){ resolve(res); return; }
             again('サーバーが記録した行数が一致しません（' + res.added + '/' + payload.rows.length + '）');
@@ -1441,7 +1446,10 @@ function sendWithRetry_(payload, onProgress){
           if (res && res.retry){ again(res.message || '混み合っています'); return; }
           reject(new Error((res && res.message) || '不明なエラー'));   // 認証エラー等：再送しても直らない
         })
-        .catch(function (e) { again('通信エラー: ' + (e && e.message ? e.message : e)); });
+        .catch(function (e) {
+          clearTimeout(timer);
+          again(e && e.name === 'AbortError' ? '応答がありません（' + Math.round(SEND_TIMEOUT_MS / 1000) + '秒）' : '通信エラー: ' + (e && e.message ? e.message : e));
+        });
     }
     once();
   });

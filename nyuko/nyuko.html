@@ -375,7 +375,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.33';   // 更新のたびにここを上げる
+const APP_VERSION = 'v1.34';   // 更新のたびにここを上げる
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbyMZEogfrGCsH-joO1oBN0GST7GA_3wUwYdJ1ciomnJQ7Nh8NBs9SiTkrCmcrsmdArkGQ/exec';
 
 const QR_MIN = 63, QR_MAX = 350;
@@ -1707,6 +1707,15 @@ window.addEventListener('popstate', function () {
   }
 });
 pushDummyHistory();
+
+/* ================= オフライン起動（Service Worker） =================
+   一度でも、ネットに繋がった状態で開けば、画面と jsQR を端末に保存する。次からは、ネットが無くても、アプリを起動できる
+   （読取は、オフラインで動く。送信とログインだけ、ネットが要る）。sw.js は、この nyuko.html と同じフォルダに置く。 */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js').catch(function () { /* 登録できなくても、今までどおり動く */ });
+  });
+}
 </script>
 </body>
 </html>

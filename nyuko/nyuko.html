@@ -365,7 +365,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.31';   // 更新のたびにここを上げる
+const APP_VERSION = 'v1.32';   // 更新のたびにここを上げる
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbyMZEogfrGCsH-joO1oBN0GST7GA_3wUwYdJ1ciomnJQ7Nh8NBs9SiTkrCmcrsmdArkGQ/exec';
 
 const QR_MIN = 63, QR_MAX = 350;
@@ -936,12 +936,22 @@ function onDecode(raw){
     return;
   }
 
-  // ①フォーマット
-  const okFormat = raw.length >= QR_MIN && raw.length <= QR_MAX
-                && raw.slice(0,8) === '20110607' && raw.indexOf('000.0') !== -1;
+  // ①フォーマット（aia準拠）
+  //  ・マスタ（1枚目）の読取：長さだけを見る（64〜350文字）。先頭が 20110607 でなくても、000.0 を含まなくても読める
+  //    （aia：マスタ読取は「長さ>63」だけで、先頭・末尾の形式チェックは、2枚目の現品だけ）。
+  //  ・現品（2枚目以降）の読取：先頭が 20110607 で、000.0 を含む、通常QRの形式であること。
+  //    現品読取とみなすのは、マスタ設定済み／カラブリ・エリアコード・ハミダシ中／緊急OFF中。
+  const isItemRead = !!(pending.master || MODE_GROUP_A.indexOf(pending.mode) !== -1
+                        || pending.mode === 'karaburi' || pending.mode === 'hamidasi'
+                        || document.getElementById('bypass').checked);
+  const okFormat = isItemRead
+    ? (raw.length >= QR_MIN && raw.length <= QR_MAX && raw.slice(0,8) === '20110607' && raw.indexOf('000.0') !== -1)
+    : (raw.length > 63 && raw.length <= QR_MAX);
   if (!okFormat){
     rejCounts.format++;
-    reject('format', '読取エラー：QRの形式が不正です。再スキャンしてください（長さ ' + raw.length + '）');
+    reject('format', isItemRead
+      ? '読取エラー：QRの形式が不正です。再スキャンしてください（長さ ' + raw.length + '）'
+      : '読取エラー：マスタの長さが不正です。再スキャンしてください（長さ ' + raw.length + '）');
     return;
   }
 

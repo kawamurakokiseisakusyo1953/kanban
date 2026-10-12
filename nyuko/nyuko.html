@@ -162,6 +162,7 @@
   .offBannerBox small { display:block; font-size:12px; font-weight:700; opacity:.95; }
   @keyframes offPulse { 0%,100% { opacity:1; } 50% { opacity:.72; } }
   .toggles label.isOff { color:#dc2626; font-weight:900; }
+
 </style>
 </head>
 <body>
@@ -375,7 +376,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.34';   // 更新のたびにここを上げる
+const APP_VERSION = 'v1.38';   // 更新のたびにここを上げる
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbyMZEogfrGCsH-joO1oBN0GST7GA_3wUwYdJ1ciomnJQ7Nh8NBs9SiTkrCmcrsmdArkGQ/exec';
 
 const QR_MIN = 63, QR_MAX = 350;
@@ -392,11 +393,38 @@ const REFOCUS_EVERY_FRAMES = 6;
 // hamidasi = はみ出し（「hamidasi→現品」の1段階読取。kaizyo等で解除するまで続く。重複チェックは通常どおり行う）
 // グループA = エリアコード（現品にそのコードが記録される）。kaizyoで解除するまで続く
 // グループB = 単独で完結するイベント記録。読み取った瞬間に1件だけ記録する
-const MODE_GROUP_A = ['1-1damu','1-2barasi','1-2damu','2-1damu','3-1damu','3-2damu','5-1damu','5-2damu',
-                       '6-1damu','6-2damu','7-1damu','7-2barasi','7-2damu','kasimedam','nokisita'];
-const MODE_GROUP_B = ['daisya','sonota','1f2fid','zisouh','3fokib','hannyu','chudan','rainse',
-                       'qctymt','zkkkkk','hinsit','rainch'];
-const MODE_CODES = ['kaizyo', 'karaburi', 'hamidasi'].concat(MODE_GROUP_A, MODE_GROUP_B);
+// 組み込みの一覧（マスタを読めない時・マスタに無い時も、これで動く）。マスタ（担当者マスタのタブ「特殊QR」）に足したコードは、
+// 次に起動した時（ネットがある時）に自動で読み込んで、この一覧に足す。マスタに書いた種別(A/B)が、組み込みと違う場合は、マスタが優先。
+const MODE_GROUP_A_DEFAULT = ['1-1damu','1-2barasi','1-2damu','2-1damu','3-1damu','3-2damu','5-1damu','5-2damu','5-2barasi',
+                              '6-1damu','6-2damu','7-1damu','7-2barasi','7-2damu','kasimedam','nokisita'];
+const MODE_GROUP_B_DEFAULT = ['daisya','sonota','1f2fid','zisouh','3fokib','hannyu','chudan','rainse',
+                              'qctymt','zkkkkk','hinsit','rainch'];
+const MODE_BUILTIN = ['kaizyo', 'karaburi', 'hamidasi'];   // 組み込み（マスタでは、変えられない）
+let MODE_GROUP_A = MODE_GROUP_A_DEFAULT.slice();
+let MODE_GROUP_B = MODE_GROUP_B_DEFAULT.slice();
+let MODE_CODES = MODE_BUILTIN.concat(MODE_GROUP_A, MODE_GROUP_B);
+const K_SPECIAL = 'nyu_special';
+// マスタの一覧（{A:[...], B:[...]}）を、組み込みの一覧に足す
+function applySpecialQr_(sp){
+  const clean = function (arr) {
+    return (Array.isArray(arr) ? arr : []).map(function (x) { return String(x == null ? '' : x).trim(); })
+      .filter(function (x) { return x && MODE_BUILTIN.indexOf(x) === -1; });
+  };
+  const a = clean(sp && sp.A), b = clean(sp && sp.B);
+  const A = MODE_GROUP_A_DEFAULT.filter(function (c) { return b.indexOf(c) === -1; });
+  const B = MODE_GROUP_B_DEFAULT.filter(function (c) { return a.indexOf(c) === -1; });
+  a.forEach(function (c) { if (A.indexOf(c) === -1) A.push(c); });
+  b.forEach(function (c) { if (B.indexOf(c) === -1) B.push(c); });
+  MODE_GROUP_A = A;
+  MODE_GROUP_B = B;
+  MODE_CODES = MODE_BUILTIN.concat(A, B);
+}
+function saveSpecialQr_(sp){
+  if (!sp || (!Array.isArray(sp.A) && !Array.isArray(sp.B))) return;
+  try { localStorage.setItem(K_SPECIAL, JSON.stringify(sp)); } catch (e) {}
+  applySpecialQr_(sp);
+}
+try { applySpecialQr_(JSON.parse(localStorage.getItem(K_SPECIAL) || 'null')); } catch (e) {}   // 保存してある一覧を、すぐ反映（オフラインでも使える）
 const MODE_LABEL = { normal:'入庫', karaburi:'カラブリ', hamidasi:'はみ出し' };
 
 const K_AUTH = 'nyu_auth', K_PENDING = 'nyu_pending', K_HIST = 'nyu_history', K_DEV = 'nyu_device';
@@ -515,6 +543,7 @@ function fetchStaffListForLogin(){
   fetch(GAS_URL + '?action=login&staff=', { method:'GET' })
     .then(r => r.json())
     .then(res => {
+      if (res && res.specialQr) saveSpecialQr_(res.specialQr);
       if (res && res.staffList && res.staffList.length){
         const sel = document.getElementById('loginStaff');
         sel.innerHTML = '<option value="">選択してください</option>' + res.staffList.map(s => '<option>'+esc(s)+'</option>').join('');
@@ -529,6 +558,7 @@ function loadWithFreshAuthThenEnter(){
                    body: JSON.stringify({ action:'login', staff: auth.staff }) })
     .then(r => r.json())
     .then(res => {
+      if (res && res.specialQr) saveSpecialQr_(res.specialQr);
       if (res && res.ok){
         auth = { staff: res.staff, hinbanReady: !!res.hinbanReady, hinban: res.hinban || [], staffList: res.staffList || [], ts: Date.now() };
         lset(K_AUTH, auth);
@@ -585,6 +615,7 @@ function doLogin(){
                    body: JSON.stringify({ action:'login', staff: staff }) })
     .then(r => r.json()).then(res => {
     finishLoading();
+    if (res && res.specialQr) saveSpecialQr_(res.specialQr);
     if (!res.ok){ err.textContent = res.message || '選択失敗'; return; }
     auth = { staff: res.staff, hinbanReady: !!res.hinbanReady, hinban: res.hinban || [], staffList: res.staffList || [], ts: Date.now() };
     lset(K_AUTH, auth);
@@ -1706,6 +1737,8 @@ window.addEventListener('popstate', function () {
     showConfirm('未送信のデータ（' + pending.scans.length + '枚）があります。\n担当者選択に戻りますか？\n（データは保持されます）', logout);
   }
 });
+
+
 pushDummyHistory();
 
 /* ================= オフライン起動（Service Worker） =================

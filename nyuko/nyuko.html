@@ -235,7 +235,7 @@
 
   <div class="toggles">
     <label id="lblBypassMaster"><input type="checkbox" id="bypassMaster" onchange="onOffToggle_('bypassMaster')"> マスタ照合OFF（緊急時）</label>
-    <label id="lblBypassDup"><input type="checkbox" id="bypassDup" onchange="onOffToggle_('bypassDup')"> 重複チェックOFF（緊急時）</label>
+    <label id="lblBypassDup"><input type="checkbox" id="bypassDup" onchange="onOffToggle_('bypassDup')"> <span>重複チェックOFF（緊急時）<small style="display:block;font-weight:400;font-size:11px">同じかんばんも、マスタかんばんも、読めます</small></span></label>
     <label><input type="checkbox" id="beepOn" checked> 音</label>
     <label><input type="checkbox" id="vibOn" checked> バイブ</label>
   </div>
@@ -376,7 +376,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.38';   // 更新のたびにここを上げる
+const APP_VERSION = 'v1.39';   // 更新のたびにここを上げる
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbyMZEogfrGCsH-joO1oBN0GST7GA_3wUwYdJ1ciomnJQ7Nh8NBs9SiTkrCmcrsmdArkGQ/exec';
 
 const QR_MIN = 63, QR_MAX = 350;
@@ -467,16 +467,16 @@ function onOffToggle_(id){
   el.checked = false;   // いったん戻して、確認が取れてからONにする
   const msg = (id === 'bypassMaster')
     ? 'マスタ照合を「OFF」にします。\n品番が違っていても、読み取れてしまいます（緊急時だけ）。\nよろしいですか？'
-    : '重複チェックを「OFF」にします。\n同じかんばんを、何度でも読み取れてしまいます（緊急時だけ）。\nよろしいですか？';
+    : '重複チェックを「OFF」にします。\n同じかんばんを、何度でも読み取れてしまいます。\nマスタかんばん（短い形式）も、現品として読み取ります（緊急時だけ）。\nよろしいですか？';
   showConfirm(msg, function () { el.checked = true; updateOffBanner(); }, function () { updateOffBanner(); });
 }
 function updateOffBanner(){
   const m = document.getElementById('bypassMaster').checked;
   const d = document.getElementById('bypassDup').checked;
   let html = '';
-  if (m && d)      html = '⚠ いま【マスタ照合OFF】＋【重複チェックOFF】です<small>品番が違っても・同じかんばんでも、読み取ります</small>';
+  if (m && d)      html = '⚠ いま【マスタ照合OFF】＋【重複チェックOFF】です<small>品番が違っても・同じかんばんでも・マスタかんばんでも、読み取ります</small>';
   else if (m)      html = '⚠ いま【マスタ照合OFF】です<small>品番がマスタと違っても、読み取ります</small>';
-  else if (d)      html = '⚠ いま【重複チェックOFF】です<small>同じかんばんを、何度でも読み取ります</small>';
+  else if (d)      html = '⚠ いま【重複チェックOFF】です<small>同じかんばんを何度でも・マスタかんばんも、読み取ります</small>';
   document.querySelectorAll('.offBannerBox').forEach(function (b) {
     b.innerHTML = html;
     b.style.display = html ? 'block' : 'none';
@@ -1012,8 +1012,13 @@ function onDecode(raw){
   const isItemRead = !!(pending.master || MODE_GROUP_A.indexOf(pending.mode) !== -1
                         || pending.mode === 'karaburi' || pending.mode === 'hamidasi'
                         || document.getElementById('bypassMaster').checked);
+  //  ・「重複チェックOFF」の間は、現品側でも「000.0を含む」を見ない（先頭 20110607 と長さだけ）。
+  //    → マスタかんばん（短い形式。20110607で始まるが、000.0が無い）も、現品として読める。入庫・ハミダシ・カラブリ・エリアコード、どれでも同じ。
+  const fmtRelax = document.getElementById('bypassDup').checked;
   const okFormat = isItemRead
-    ? (raw.length >= QR_MIN && raw.length <= QR_MAX && raw.slice(0,8) === '20110607' && raw.indexOf('000.0') !== -1)
+    ? (fmtRelax
+        ? (raw.length > 63 && raw.length <= QR_MAX && raw.slice(0,8) === '20110607')
+        : (raw.length >= QR_MIN && raw.length <= QR_MAX && raw.slice(0,8) === '20110607' && raw.indexOf('000.0') !== -1))
     : (raw.length > 63 && raw.length <= QR_MAX);
   if (!okFormat){
     rejCounts.format++;

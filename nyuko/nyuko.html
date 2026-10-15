@@ -411,7 +411,7 @@ loadJsQR_();
 </script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.45';   // 更新のたびにここを上げる
+const APP_VERSION = 'v1.46';   // 更新のたびにここを上げる
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbyMZEogfrGCsH-joO1oBN0GST7GA_3wUwYdJ1ciomnJQ7Nh8NBs9SiTkrCmcrsmdArkGQ/exec';
 
 const QR_MIN = 63, QR_MAX = 350;
@@ -463,7 +463,7 @@ try { applySpecialQr_(JSON.parse(localStorage.getItem(K_SPECIAL) || 'null')); } 
 const MODE_LABEL = { normal:'入庫', karaburi:'カラブリ', hamidasi:'はみ出し' };
 
 const K_AUTH = 'nyu_auth', K_PENDING = 'nyu_pending', K_HIST = 'nyu_history', K_DEV = 'nyu_device';
-const K_CAMOFF = 'nyu_cam_off';
+const K_CAMOFF = 'nyu_cam_off2';   // v1.46/1.69：手動のみに切り替えた時に、古い記憶（自動切替の名残）を捨てるため、名前を変えた
 
 /* ================= localStorage ================= */
 function lget(k, d){ try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch(e){ return d; } }

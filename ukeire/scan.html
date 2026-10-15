@@ -160,7 +160,8 @@
             border-radius:12px; padding:12px; margin-bottom:10px; font-size:14px; font-weight:700; }
 
   #verFixed { position:fixed; bottom:4px; right:8px; font-size:10px; color:var(--sub); opacity:.55; z-index:9999; pointer-events:none; }
-  #netFixed { position:fixed; top:8px; right:8px; font-size:11px; padding:4px 10px; z-index:9999; pointer-events:none; }
+  #netFixed { position:fixed; top:8px; right:8px; font-size:12px; padding:6px 12px; z-index:9999; border:1px solid var(--accent); cursor:pointer; }
+  #netFixed:active { opacity:.7; }
 
   .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:300; display:none; align-items:center; justify-content:center; padding:22px; }
   .modal-overlay.on { display:flex; }
@@ -172,7 +173,7 @@
 </head>
 <body>
 <div id="verFixed">—</div>
-<div class="badge" id="netFixed">—</div>
+<div class="badge" id="netFixed" onclick="openWifiSettings_()">—</div>
 
 <!-- ========== ログイン ========== -->
 <div class="screen on" id="s-login">
@@ -380,10 +381,42 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script>
+/* ================= QR読取の部品（jsQR）：裏で読み込む =================
+   同期で読み込むと、電波が弱い時、これが終わるまで、アプリ本体が動かず、ログイン画面のまま固まる。
+   → 画面の起動を止めないよう、裏で読み込む。失敗・応答なしでも、数秒おきに自動でやり直す。 */
+const JSQR_URL = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
+let jsqrTries_ = 0, jsqrWaitShown_ = false;
+function jsqrReady_(){
+  if (jsqrWaitShown_){
+    jsqrWaitShown_ = false;
+    try { showResult('idle', '📷 かざしてください'); } catch (e) {}
+  }
+}
+function loadJsQR_(){
+  if (typeof jsQR === 'function') { jsqrReady_(); return; }
+  if (++jsqrTries_ > 12) return;
+  const sc = document.createElement('script');
+  sc.src = JSQR_URL;
+  sc.async = true;
+  sc.onload = function () { if (typeof jsQR === 'function') jsqrReady_(); };
+  sc.onerror = function () { try { sc.remove(); } catch (e) {} };
+  document.head.appendChild(sc);
+  setTimeout(function () {
+    if (typeof jsQR === 'function') return;
+    const sc2 = document.getElementById('s-scan');
+    if (sc2 && sc2.classList.contains('on') && !jsqrWaitShown_){
+      jsqrWaitShown_ = true;
+      try { showResult('bad', '⏳ 読取の準備中です。電波を確認してください（自動で、読み込み直します）'); } catch (e) {}
+    }
+    loadJsQR_();
+  }, 6000);
+}
+loadJsQR_();
+</script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.64';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
+const APP_VERSION = 'v1.66';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzALEt3uPha_JbW7USYz8Q3TJnbg9gJauFe9yTEC3KqPrIqChkBLb-Tj0kt5WjqlMor/exec';
 
 const MAKERS_FALLBACK = ['大澤熔接工業所','清国溶接','小山製作所','山田鉄工所','丸磯工業所','花木製作所','羽谷工業所','伊藤プレス','メタルクリーン','マルマツ','ウエルギコウ','松原工業所','安井鉄工所','真鍋工業','向井工作所','大動工業','アクトメタル','日本グラス','エバー','トライ','村田工業所','檜山技研工業所','加藤技研工業所','トヨアケメッキ','福洋精工'];
@@ -454,10 +487,10 @@ window.addEventListener('online', netBadge);
 window.addEventListener('offline', netBadge);
 
 /* ================= 起動 ================= */
-window.addEventListener('load', () => {
+function appInit_(){
   document.getElementById('verTag').textContent = APP_VERSION;
   document.getElementById('verFixed').textContent = APP_VERSION;
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+  if ('serviceWorker' in navigator) setTimeout(function () { navigator.serviceWorker.register('sw.js').catch(()=>{}); }, 3000);
   netBadge();
 
   // メーカー候補
@@ -484,7 +517,7 @@ window.addEventListener('load', () => {
   } else {
     renderResumeBoxOnLogin();
   }
-});
+}
 
 // ログイン記憶を保ったまま、最新の設定・品番マスタを取ってから納入日画面を表示する
 // （オンラインの時だけ呼ばれる。表示は1回だけ＝あとから内容が差し替わってチラつくことはない）。
@@ -509,7 +542,7 @@ function loadWithFreshAuthThenEnter(){
       }
     })
     .catch(()=>{ /* GASに届かなかった：何もしない。今のキャッシュのまま */ });
-  const timeout = new Promise(resolve => setTimeout(resolve, 30000)); // 保険：30秒で諦める
+  const timeout = new Promise(resolve => setTimeout(resolve, 30000)); // 保険：30秒で諦める（遅い回線でも、最新を待つ。取得は裏で続く）
   Promise.race([req, timeout]).then(() => {
     masterFetchStatus = fetched ? 'fresh' : 'stale';
     enterDateScreen();
@@ -603,11 +636,20 @@ function confirmSwitchMaker(){
 // 画面ロック：ポケットへの出し入れでボタンを誤タップしないよう、タップを全て無効にする。解除は長押しのみ。
 // ロック中もスキャナ／カメラの読取は通常どおり動く。
 let lockTimer = null;
+function nativeLock(on){ try { if (window.NyukoLock) window.NyukoLock.setLocked(on); } catch(e){} }
+// 画面上部の「オンライン／オフライン」を押すと、WiFi設定（クイック設定パネル）を開く（APK v1.6以降）
+function openWifiSettings_(){
+  const lo = document.getElementById('lockOverlay');
+  if (lo && lo.style.display === 'flex') return;   // ロック中は、押せない
+  try { if (window.NyukoLock && typeof window.NyukoLock.openWifi === 'function') window.NyukoLock.openWifi(); } catch (e) {}
+}
 function lockScreen(){
   document.getElementById('lockOverlay').style.display = 'flex';
+  nativeLock(true);
 }
 function unlockScreen(){
   document.getElementById('lockOverlay').style.display = 'none';
+  nativeLock(false);
   const bar = document.getElementById('lockBar'); if (bar) bar.style.width = '0';
 }
 function lockPressStart(){
@@ -1633,6 +1675,10 @@ window.addEventListener('popstate', function () {
   }
 });
 pushDummyHistory();
+
+// 起動処理は、全ての定義が終わった、ここで動かす（外部の部品の読み込み完了(load)は、待たない）
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', appInit_);
+else appInit_();
 </script>
 </body>
 </html>

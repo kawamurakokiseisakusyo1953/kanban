@@ -411,7 +411,7 @@ loadJsQR_();
 </script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.42';   // 更新のたびにここを上げる
+const APP_VERSION = 'v1.45';   // 更新のたびにここを上げる
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbyMZEogfrGCsH-joO1oBN0GST7GA_3wUwYdJ1ciomnJQ7Nh8NBs9SiTkrCmcrsmdArkGQ/exec';
 
 const QR_MIN = 63, QR_MAX = 350;
@@ -867,7 +867,7 @@ if (NATIVE){
   new MutationObserver(syncCamVisible).observe(document.body, { attributes:true, attributeFilter:['class'], subtree:true });
 }
 
-let cameraManuallyOff = (lget(K_CAMOFF, false) === true);
+let cameraManuallyOff = (lget(K_CAMOFF, true) !== false);   // 記憶が無い時は OFF。「📷 カメラON」で起動（記憶される）
 function cameraAllowed(){ return !cameraManuallyOff; }
 function updateCamToggleBtn(){
   const btn = document.getElementById('btnCamToggle');
@@ -881,10 +881,8 @@ function toggleCameraManual(){
   reapplyCameraState();
 }
 function setCameraDefaultFromScanner(connected){
-  cameraManuallyOff = !!connected;
-  lset(K_CAMOFF, cameraManuallyOff);
-  updateCamToggleBtn();
-  reapplyCameraState();
+  // v1.45：カメラは、手動のみ（「📷 カメラON/OFF」ボタン）。スキャナの接続・切断では、切り替えない。
+  console.log('[camtoggle] scanner connected=' + connected + '（カメラは手動のみ：切り替えない）');
 }
 updateCamToggleBtn();
 function reapplyCameraState(){
@@ -893,7 +891,7 @@ function reapplyCameraState(){
   if (cameraAllowed()){
     if (!running) startCamera();
   } else {
-    if (running) stopCamera();
+    if (running || stream) stopCamera();   // 起動の途中(running=false)でも、取得済みのストリームは止める
     showResult('idle', '📡 スキャナで読み取ってください');
     document.getElementById('dbg').textContent = 'カメラ無効（スキャナ使用中）';
   }
@@ -919,6 +917,12 @@ function startCamera(){
   }
   startCameraWeb();
 }
+// カメラを起動している途中で、スキャナが接続され、カメラが無効になった時：起動を取りやめる
+function camDisabledWhileStarting_(){
+  stopCamera();
+  showResult('idle', '📡 スキャナで読み取ってください');
+  const d = document.getElementById('dbg'); if (d) d.textContent = 'カメラ無効（スキャナ使用中）';
+}
 async function startCameraWeb(){
   running=false; stopCamera();
   document.getElementById('err') && (document.getElementById('err').textContent='');
@@ -929,13 +933,17 @@ async function startCameraWeb(){
   } catch(e){
     showAlert('カメラ起動失敗: ' + e.name + ' / ' + e.message); return;
   }
+  if (!cameraAllowed()){ camDisabledWhileStarting_(); return; }   // 取得を待っている間に、スキャナが接続された
   video.srcObject = stream; await video.play();
+  if (!stream) return;                                             // 待っている間に、止められた（スキャナ接続など）
   track = stream.getVideoTracks()[0];
   try { await track.applyConstraints({ advanced:[{ focusMode:'continuous' }] }); } catch(e){}
+  if (!stream) return;
   let caps={}; try { caps = track.getCapabilities ? track.getCapabilities() : {}; } catch(e){}
   document.getElementById('btnTorch').disabled = !caps.torch;
   isoInfo = 'auto';
 
+  if (!cameraAllowed()){ camDisabledWhileStarting_(); return; }   // 準備の途中で、スキャナが接続された
   armed=true; emptyStreak=0; acceptedRaw=''; paused=false;
   running=true; lastLoopTs=0;
   try { if(!actx) actx = new (window.AudioContext||window.webkitAudioContext)(); actx.resume(); } catch(e){}

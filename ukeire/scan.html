@@ -416,7 +416,7 @@ loadJsQR_();
 </script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.66';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
+const APP_VERSION = 'v1.68';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzALEt3uPha_JbW7USYz8Q3TJnbg9gJauFe9yTEC3KqPrIqChkBLb-Tj0kt5WjqlMor/exec';
 
 const MAKERS_FALLBACK = ['大澤熔接工業所','清国溶接','小山製作所','山田鉄工所','丸磯工業所','花木製作所','羽谷工業所','伊藤プレス','メタルクリーン','マルマツ','ウエルギコウ','松原工業所','安井鉄工所','真鍋工業','向井工作所','大動工業','アクトメタル','日本グラス','エバー','トライ','村田工業所','檜山技研工業所','加藤技研工業所','トヨアケメッキ','福洋精工'];
@@ -869,7 +869,7 @@ if (NATIVE){
 // 未実装の環境（普通のブラウザ等）では常に有効として扱う。
 // スキャナ（Bluetooth SPP等）を使っていてカメラ映像が邪魔な時に、手動でカメラだけ止められる。
 // 設定は端末に保存され、次回起動時も引き継がれる。
-let cameraManuallyOff = (lget(K_CAMOFF, false) === true);
+let cameraManuallyOff = (lget(K_CAMOFF, true) !== false);   // 記憶が無い時は OFF。「📷 カメラON」で起動（記憶される）
 function cameraAllowed(){
   return !cameraManuallyOff;
 }
@@ -890,11 +890,8 @@ function toggleCameraManual(){
 // 接続中はカメラをデフォルトOFF、未接続の間はデフォルトONにする。
 // （ボタンでの手動切り替えと同じ変数を使うので、その後もボタンでいつでも上書きできる）
 function setCameraDefaultFromScanner(connected){
-  cameraManuallyOff = !!connected;
-  console.log('[camtoggle] setCameraDefaultFromScanner connected=' + connected + ' -> cameraManuallyOff=' + cameraManuallyOff);
-  lset(K_CAMOFF, cameraManuallyOff);
-  updateCamToggleBtn();
-  reapplyCameraState();
+  // v1.68：カメラは、手動のみ（「📷 カメラON/OFF」ボタン）。スキャナの接続・切断では、切り替えない。
+  console.log('[camtoggle] scanner connected=' + connected + '（カメラは手動のみ：切り替えない）');
 }
 updateCamToggleBtn();
 // 画面表示中にカメラON/OFFが切り替えられた時に呼ばれる（スキャン画面が出ている時のみ意味を持つ）。
@@ -905,7 +902,7 @@ function reapplyCameraState(){
   if (cameraAllowed()){
     if (!running) startCamera();
   } else {
-    if (running) stopCamera();
+    if (running || stream) stopCamera();   // 起動の途中(running=false)でも、取得済みのストリームは止める
     showResult('idle', '📡 スキャナで読み取ってください');
     document.getElementById('dbg').textContent = 'カメラ無効（スキャナ使用中）';
   }
@@ -933,6 +930,12 @@ function startCamera(){
   }
   startCameraWeb();
 }
+// カメラを起動している途中で、スキャナが接続され、カメラが無効になった時：起動を取りやめる
+function camDisabledWhileStarting_(){
+  stopCamera();
+  showResult('idle', '📡 スキャナで読み取ってください');
+  const d = document.getElementById('dbg'); if (d) d.textContent = 'カメラ無効（スキャナ使用中）';
+}
 async function startCameraWeb(){
   running=false; stopCamera();
   document.getElementById('err') && (document.getElementById('err').textContent='');
@@ -943,15 +946,19 @@ async function startCameraWeb(){
   } catch(e){
     showAlert('カメラ起動失敗: ' + e.name + ' / ' + e.message); return;
   }
+  if (!cameraAllowed()){ camDisabledWhileStarting_(); return; }   // 取得を待っている間に、スキャナが接続された
   video.srcObject = stream; await video.play();
+  if (!stream) return;                                             // 待っている間に、止められた（スキャナ接続など）
   track = stream.getVideoTracks()[0];
   try { await track.applyConstraints({ advanced:[{ focusMode:'continuous' }] }); } catch(e){}
+  if (!stream) return;
   let caps={}; try { caps = track.getCapabilities ? track.getCapabilities() : {}; } catch(e){}
   document.getElementById('btnTorch').disabled = !caps.torch;
   // ISO固定の実験は撤去。exposureModeを'manual'にすると露出時間の自動補正も止まってしまい、
   // 画面全体が暗くなる副作用の方が大きかったため、通常のオート露出・オートISOに戻す。
   isoInfo = 'auto';
 
+  if (!cameraAllowed()){ camDisabledWhileStarting_(); return; }   // 準備の途中で、スキャナが接続された
   armed=true; emptyStreak=0; acceptedRaw=''; paused=false;
   running=true; lastLoopTs=0;
   try { if(!actx) actx = new (window.AudioContext||window.webkitAudioContext)(); actx.resume(); } catch(e){}

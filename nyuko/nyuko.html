@@ -177,6 +177,7 @@
   <div class="card">
     <label class="fld">担当者</label>
     <select id="loginStaff"></select>
+    <div id="staffLoadMsg" style="display:none;margin:6px 0 0;font-size:13px;color:var(--sub);"></div>
     <button class="primary full" id="loginBtn" onclick="doLogin()">決定</button>
     <div id="loginLoading" style="display:none;text-align:center;padding:10px 0 0;">
       <span class="sub">🔄 品番マスタ読み込み中…しばらくお待ちください</span>
@@ -373,10 +374,43 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script>
+/* ================= QR読取の部品（jsQR）：裏で読み込む =================
+   ここを同期で読み込むと、電波が弱い時、これが終わるまで、アプリ本体が動かず、「担当者の入っていないログイン画面」のまま固まる。
+   → 画面の起動を止めないよう、裏で読み込む。失敗・応答なしでも、数秒おきに自動で、やり直す。 */
+const JSQR_URL = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
+let jsqrTries_ = 0, jsqrWaitShown_ = false;
+function jsqrReady_(){
+  if (jsqrWaitShown_){
+    jsqrWaitShown_ = false;
+    try { showResult('idle', '📷 かざしてください'); } catch (e) {}
+  }
+}
+function loadJsQR_(){
+  if (typeof jsQR === 'function') { jsqrReady_(); return; }
+  if (++jsqrTries_ > 12) return;
+  const sc = document.createElement('script');
+  sc.src = JSQR_URL;
+  sc.async = true;
+  sc.onload = function () { if (typeof jsQR === 'function') jsqrReady_(); };
+  sc.onerror = function () { try { sc.remove(); } catch (e) {} };
+  document.head.appendChild(sc);
+  // 応答が無いまま止まっても、6秒後にもう一度。読取画面にいる間は、待ち中であることを表示する
+  setTimeout(function () {
+    if (typeof jsQR === 'function') return;
+    const sc2 = document.getElementById('s-scan');
+    if (sc2 && sc2.classList.contains('on') && !jsqrWaitShown_){
+      jsqrWaitShown_ = true;
+      try { showResult('bad', '⏳ 読取の準備中です。電波を確認してください（自動で、読み込み直します）'); } catch (e) {}
+    }
+    loadJsQR_();
+  }, 6000);
+}
+loadJsQR_();
+</script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.39';   // 更新のたびにここを上げる
+const APP_VERSION = 'v1.41';   // 更新のたびにここを上げる
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbyMZEogfrGCsH-joO1oBN0GST7GA_3wUwYdJ1ciomnJQ7Nh8NBs9SiTkrCmcrsmdArkGQ/exec';
 
 const QR_MIN = 63, QR_MAX = 350;
@@ -507,17 +541,17 @@ window.addEventListener('online', netBadge);
 window.addEventListener('offline', netBadge);
 
 /* ================= 起動 ================= */
-window.addEventListener('load', () => {
+function appInit_(){
   document.getElementById('verTag').textContent = APP_VERSION;
   document.getElementById('verFixed').textContent = APP_VERSION;
   netBadge();
 
   // 担当者候補はマスタ取得に成功した時のstaffListで更新する。初回（マスタ未取得）は空のまま、
   // オンラインでの最初のログインでGASから取得する。
-  const sel = document.getElementById('loginStaff');
-  const cachedStaffList = (auth && auth.staffList && auth.staffList.length) ? auth.staffList : [];
-  sel.innerHTML = '<option value="">選択してください</option>' + cachedStaffList.map(s => '<option>'+esc(s)+'</option>').join('');
-  if (!cachedStaffList.length) fetchStaffListForLogin();
+  let cachedStaffList = (auth && auth.staffList && auth.staffList.length) ? auth.staffList : lget(K_STAFFLIST, []);
+  if (!Array.isArray(cachedStaffList)) cachedStaffList = [];
+  fillStaffSelect_(cachedStaffList);
+  if (!cachedStaffList.length || !auth) fetchStaffListForLogin();   // 一覧が無い時、または、ログイン画面の時は、最新を取りに行く
 
   pending = lget(K_PENDING, null);
 
@@ -535,22 +569,67 @@ window.addEventListener('load', () => {
   } else {
     renderResumeBoxOnLogin();
   }
-});
+}
 
 // ログイン画面（担当者未選択の状態）で、選択肢を表示するためだけにマスタ一覧を軽く取りに行く。
 // 失敗しても致命的ではない（担当者が選べないだけなので、オンラインになってから再試行させる）。
-function fetchStaffListForLogin(){
-  fetch(GAS_URL + '?action=login&staff=', { method:'GET' })
+// 一覧が空のまま固まらないように：1回ごとに12秒で見切り、取れるまで自動で再試行する（最大8回）。取れない間は、画面に出す。
+const K_STAFFLIST = 'nyu_stafflist';   // 担当者の一覧の記憶（ログアウトしても消さない）
+let staffFetchTry_ = 0, staffFetching_ = false, staffRetryTimer_ = null;
+function fillStaffSelect_(list){
+  const sel = document.getElementById('loginStaff');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">選択してください</option>' + list.map(s => '<option>'+esc(s)+'</option>').join('');
+  if (cur && list.indexOf(cur) !== -1) sel.value = cur;
+}
+function saveStaffList_(list){
+  if (Array.isArray(list) && list.length) lset(K_STAFFLIST, list);
+}
+function setStaffMsg_(html){
+  const m = document.getElementById('staffLoadMsg');
+  if (!m) return;
+  m.innerHTML = html;
+  m.style.display = html ? 'block' : 'none';
+}
+function fetchStaffListForLogin(manual){
+  if (staffFetching_) return;
+  if (manual === true) staffFetchTry_ = 0;
+  clearTimeout(staffRetryTimer_);
+  const haveList = document.getElementById('loginStaff').options.length > 1;
+  staffFetching_ = true;
+  if (!haveList) setStaffMsg_('🔄 担当者の一覧を読み込み中…');
+  const ctl = (typeof AbortController === 'function') ? new AbortController() : null;
+  const timer = setTimeout(function () { if (ctl) ctl.abort(); }, 12000);
+  fetch(GAS_URL + '?action=login&staff=', ctl ? { method:'GET', signal: ctl.signal } : { method:'GET' })
     .then(r => r.json())
     .then(res => {
+      clearTimeout(timer); staffFetching_ = false;
       if (res && res.specialQr) saveSpecialQr_(res.specialQr);
-      if (res && res.staffList && res.staffList.length){
-        const sel = document.getElementById('loginStaff');
-        sel.innerHTML = '<option value="">選択してください</option>' + res.staffList.map(s => '<option>'+esc(s)+'</option>').join('');
-      }
+      if (!(res && res.staffList && res.staffList.length)) throw new Error('empty');
+      saveStaffList_(res.staffList);
+      fillStaffSelect_(res.staffList);
+      setStaffMsg_('');
+      staffFetchTry_ = 0;
     })
-    .catch(()=>{});
+    .catch(() => {
+      clearTimeout(timer); staffFetching_ = false;
+      if (document.getElementById('loginStaff').options.length > 1){ setStaffMsg_(''); return; }   // 一覧が既に出ているなら、静かに諦める
+      staffFetchTry_++;
+      if (staffFetchTry_ < 8){
+        setStaffMsg_('🔄 担当者の一覧を、読み込み直しています…（' + staffFetchTry_ + '回目）');
+        staffRetryTimer_ = setTimeout(fetchStaffListForLogin, Math.min(2000 * staffFetchTry_, 10000));
+      } else {
+        setStaffMsg_('⚠ 担当者の一覧を読み込めません。電波を確認して、'
+          + '<button type="button" class="ghost" onclick="fetchStaffListForLogin(true)">もう一度読み込む</button>');
+      }
+    });
 }
+// ネットに繋がり直した時、一覧が空なら、すぐ読み込み直す
+window.addEventListener('online', function () {
+  const sel = document.getElementById('loginStaff');
+  const login = document.getElementById('s-login');
+  if (sel && login && login.classList.contains('on') && sel.options.length <= 1) fetchStaffListForLogin(true);
+});
 
 function loadWithFreshAuthThenEnter(){
   let fetched = false;
@@ -563,11 +642,12 @@ function loadWithFreshAuthThenEnter(){
         auth = { staff: res.staff, hinbanReady: !!res.hinbanReady, hinban: res.hinban || [], staffList: res.staffList || [], ts: Date.now() };
         lset(K_AUTH, auth);
         setAuthSets();
+        saveStaffList_(auth.staffList);
         fetched = true;
       }
     })
     .catch(()=>{ /* GASに届かなかった：何もしない。今のキャッシュのまま */ });
-  const timeout = new Promise(resolve => setTimeout(resolve, 30000));
+  const timeout = new Promise(resolve => setTimeout(resolve, 6000));
   Promise.race([req, timeout]).then(() => {
     enterScanScreen();
   });
@@ -619,6 +699,7 @@ function doLogin(){
     if (!res.ok){ err.textContent = res.message || '選択失敗'; return; }
     auth = { staff: res.staff, hinbanReady: !!res.hinbanReady, hinban: res.hinban || [], staffList: res.staffList || [], ts: Date.now() };
     lset(K_AUTH, auth);
+    saveStaffList_(auth.staffList);
     setAuthSets();
     enterScanScreen();
   }).catch(e => {
@@ -1750,10 +1831,14 @@ pushDummyHistory();
    一度でも、ネットに繋がった状態で開けば、画面と jsQR を端末に保存する。次からは、ネットが無くても、アプリを起動できる
    （読取は、オフラインで動く。送信とログインだけ、ネットが要る）。sw.js は、この nyuko.html と同じフォルダに置く。 */
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', function () {
+  setTimeout(function () {
     navigator.serviceWorker.register('sw.js').catch(function () { /* 登録できなくても、今までどおり動く */ });
-  });
+  }, 3000);
 }
+
+// 起動処理は、全ての定義が終わった、ここで動かす（外部の部品の読み込み完了(load)は、待たない）
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', appInit_);
+else appInit_();
 </script>
 </body>
 </html>

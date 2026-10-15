@@ -36,6 +36,7 @@ function fetchWithTimeout(req, ms) {
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;                 // 送信(POST)などは素通し
+  if (req.cache === 'no-store' || req.cache === 'reload') return;   // 版の確認(最新を、必ずネットから取る)は、素通し
   const url = new URL(req.url);
 
   // GAS API は絶対にキャッシュしない（常にネット）
@@ -50,7 +51,7 @@ self.addEventListener('fetch', (e) => {
     // アプリ本体は「ネット優先」。ネットに繋がらない・4秒待っても返らない時は、保存してある版を使う。
     e.respondWith(
       fetchWithTimeout(req, NET_TIMEOUT_MS).then((res) => {
-        if (res && res.ok) {
+        if (res && res.ok && !url.search) {          // 「?」付きのURLは、保存しない（保存が、増え続けないように）
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put(req, copy));
         }

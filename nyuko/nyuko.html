@@ -147,7 +147,8 @@
             border-radius:12px; padding:12px; margin-bottom:10px; font-size:14px; font-weight:700; }
 
   #verFixed { position:fixed; bottom:4px; right:8px; font-size:10px; color:var(--sub); opacity:.55; z-index:9999; pointer-events:none; }
-  #netFixed { position:fixed; top:8px; right:8px; font-size:11px; padding:4px 10px; z-index:9999; pointer-events:none; }
+  #netFixed { position:fixed; top:8px; right:8px; font-size:12px; padding:6px 12px; z-index:9999; border:1px solid var(--accent); cursor:pointer; }
+  #netFixed:active { opacity:.7; }
 
   .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:300; display:none; align-items:center; justify-content:center; padding:22px; }
   .modal-overlay.on { display:flex; }
@@ -167,7 +168,7 @@
 </head>
 <body>
 <div id="verFixed">—</div>
-<div class="badge" id="netFixed">—</div>
+<div class="badge" id="netFixed" onclick="openWifiSettings_()">—</div>
 
 <!-- ========== 担当者選択（パスワード不要） ========== -->
 <div class="screen on" id="s-login">
@@ -410,7 +411,7 @@ loadJsQR_();
 </script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.41';   // 更新のたびにここを上げる
+const APP_VERSION = 'v1.42';   // 更新のたびにここを上げる
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbyMZEogfrGCsH-joO1oBN0GST7GA_3wUwYdJ1ciomnJQ7Nh8NBs9SiTkrCmcrsmdArkGQ/exec';
 
 const QR_MIN = 63, QR_MAX = 350;
@@ -789,6 +790,12 @@ function updateMasterBadge(){
 // ロック中も、Bluetoothスキャナ／カメラの読取は通常どおり動く。解除は「長押し」でのみ可能。
 let lockTimer = null;
 function nativeLock(on){ try { if (window.NyukoLock) window.NyukoLock.setLocked(on); } catch(e){} }
+// 画面上部の「オンライン／オフライン」を押すと、WiFi設定（クイック設定パネル）を開く（APK v1.3以降）
+function openWifiSettings_(){
+  const lo = document.getElementById('lockOverlay');
+  if (lo && lo.style.display === 'flex') return;   // ロック中は、押せない
+  try { if (window.NyukoLock && typeof window.NyukoLock.openWifi === 'function') window.NyukoLock.openWifi(); } catch (e) {}
+}
 function lockScreen(){
   document.getElementById('lockOverlay').style.display = 'flex';
   nativeLock(true);

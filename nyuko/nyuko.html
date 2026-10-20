@@ -255,6 +255,7 @@
   <div style="color:#fff; font-size:20px; font-weight:800; margin-bottom:10px; text-shadow:0 1px 4px rgba(0,0,0,.6);">🔒 ロック中（読取は動きます）</div>
   <div style="position:relative; width:100%; max-width:360px; overflow:hidden; border-radius:12px; background:#fff;"
        onpointerdown="lockPressStart()" onpointerup="lockPressEnd()" onpointercancel="lockPressEnd()" onpointerleave="lockPressEnd()"
+       ontouchstart="lockPressStart()" ontouchend="lockPressEnd()" ontouchcancel="lockPressEnd()"
        oncontextmenu="return false;">
     <div id="lockBar" style="position:absolute; left:0; top:0; bottom:0; width:0; background:rgba(37,99,235,.35);"></div>
     <div style="position:relative; padding:18px; text-align:center; font-size:17px; font-weight:800; color:var(--accent);">長押しで解除</div>
@@ -411,7 +412,7 @@ loadJsQR_();
 </script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.46';   // 更新のたびにここを上げる
+const APP_VERSION = 'v1.47';   // 更新のたびにここを上げる
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbyMZEogfrGCsH-joO1oBN0GST7GA_3wUwYdJ1ciomnJQ7Nh8NBs9SiTkrCmcrsmdArkGQ/exec';
 
 const QR_MIN = 63, QR_MAX = 350;
@@ -797,15 +798,18 @@ function openWifiSettings_(){
   try { if (window.NyukoLock && typeof window.NyukoLock.openWifi === 'function') window.NyukoLock.openWifi(); } catch (e) {}
 }
 function lockScreen(){
+  lockPressEnd();   // 前回の押下の状態（タイマー・青いバー）を持ち越さない
   document.getElementById('lockOverlay').style.display = 'flex';
   nativeLock(true);
 }
 function unlockScreen(){
+  if (lockTimer){ clearTimeout(lockTimer); lockTimer = null; }
   document.getElementById('lockOverlay').style.display = 'none';
   nativeLock(false);
   const bar = document.getElementById('lockBar'); if (bar) bar.style.width = '0';
 }
 function lockPressStart(){
+  if (lockTimer){ clearTimeout(lockTimer); lockTimer = null; }
   const bar = document.getElementById('lockBar');
   bar.style.transition = 'width 1.2s linear'; bar.style.width = '100%';
   lockTimer = setTimeout(function(){ lockTimer = null; unlockScreen(); }, 1200);

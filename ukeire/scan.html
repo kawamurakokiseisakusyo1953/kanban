@@ -365,6 +365,7 @@
   <div style="color:#fff; font-size:20px; font-weight:800; margin-bottom:10px; text-shadow:0 1px 4px rgba(0,0,0,.6);">🔒 ロック中（読取は動きます）</div>
   <div style="position:relative; width:100%; max-width:360px; overflow:hidden; border-radius:12px; background:#fff;"
        onpointerdown="lockPressStart()" onpointerup="lockPressEnd()" onpointercancel="lockPressEnd()" onpointerleave="lockPressEnd()"
+       ontouchstart="lockPressStart()" ontouchend="lockPressEnd()" ontouchcancel="lockPressEnd()"
        oncontextmenu="return false;">
     <div id="lockBar" style="position:absolute; left:0; top:0; bottom:0; width:0; background:rgba(37,99,235,.35);"></div>
     <div style="position:relative; padding:18px; text-align:center; font-size:17px; font-weight:800; color:var(--accent);">長押しで解除</div>
@@ -416,7 +417,7 @@ loadJsQR_();
 </script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.69';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
+const APP_VERSION = 'v1.70';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzALEt3uPha_JbW7USYz8Q3TJnbg9gJauFe9yTEC3KqPrIqChkBLb-Tj0kt5WjqlMor/exec';
 
 const MAKERS_FALLBACK = ['大澤熔接工業所','清国溶接','小山製作所','山田鉄工所','丸磯工業所','花木製作所','羽谷工業所','伊藤プレス','メタルクリーン','マルマツ','ウエルギコウ','松原工業所','安井鉄工所','真鍋工業','向井工作所','大動工業','アクトメタル','日本グラス','エバー','トライ','村田工業所','檜山技研工業所','加藤技研工業所','トヨアケメッキ','福洋精工'];
@@ -644,15 +645,18 @@ function openWifiSettings_(){
   try { if (window.NyukoLock && typeof window.NyukoLock.openWifi === 'function') window.NyukoLock.openWifi(); } catch (e) {}
 }
 function lockScreen(){
+  lockPressEnd();   // 前回の押下の状態（タイマー・青いバー）を持ち越さない
   document.getElementById('lockOverlay').style.display = 'flex';
   nativeLock(true);
 }
 function unlockScreen(){
+  if (lockTimer){ clearTimeout(lockTimer); lockTimer = null; }
   document.getElementById('lockOverlay').style.display = 'none';
   nativeLock(false);
   const bar = document.getElementById('lockBar'); if (bar) bar.style.width = '0';
 }
 function lockPressStart(){
+  if (lockTimer){ clearTimeout(lockTimer); lockTimer = null; }
   const bar = document.getElementById('lockBar');
   bar.style.transition = 'width 1.2s linear'; bar.style.width = '100%';
   lockTimer = setTimeout(function(){ lockTimer = null; unlockScreen(); }, 1200);

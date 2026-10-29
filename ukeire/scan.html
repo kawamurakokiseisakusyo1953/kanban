@@ -153,6 +153,30 @@
   .sheet .box { background:var(--card); border-radius:18px 18px 0 0; padding:18px; width:100%; }
   .sheet h3 { font-size:16px; margin-bottom:10px; }
 
+  /* ---- 手入力（QRが読めない時） ---- */
+  #manualSheet { align-items:flex-start; }
+  #manualSheet .box { border-radius:0 0 18px 18px; max-height:100%; overflow-y:auto; }
+  .manual-q { width:100%; padding:13px 14px; font-size:20px; font-weight:700; letter-spacing:.5px;
+              border:2px solid var(--accent); border-radius:10px; background:var(--bg); color:var(--txt); }
+  .manual-list { max-height:36vh; overflow-y:auto; margin-top:8px; border:1px solid var(--line); border-radius:10px; }
+  .manual-item { padding:11px 12px; border-bottom:1px solid var(--line); cursor:pointer; }
+  .manual-item:last-child { border-bottom:none; }
+  .manual-item:active { background:rgba(37,99,235,.10); }
+  .manual-item .mi-h { font-size:17px; font-weight:800; word-break:break-all; }
+  .manual-item .mi-s { font-size:12px; color:var(--sub); margin-top:2px; }
+  .manual-item.near .mi-h { color:var(--warn); }
+  .manual-hint { font-size:12px; color:var(--sub); padding:9px 12px; }
+  .manual-picked { background:rgba(37,99,235,.08); border:1px solid var(--accent); border-radius:10px; padding:10px 12px; }
+  .manual-picked .mp-h { font-size:20px; font-weight:800; word-break:break-all; }
+  .manual-picked .mp-n { font-size:12px; color:var(--sub); margin-top:2px; }
+  .manual-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .manual-calc { margin:12px 0 6px; font-size:18px; font-weight:800; text-align:center; color:var(--txt); }
+  .manual-note { font-size:12px; color:var(--warn); margin-top:4px; }
+  .manual-reasons { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .manual-chip { padding:11px 6px; border:2px solid var(--line); border-radius:10px; background:var(--bg); color:var(--txt);
+                 font-size:15px; font-weight:700; text-align:center; cursor:pointer; }
+  .manual-chip.sel { border-color:var(--accent); background:var(--accent); color:#fff; }
+
   #err { color:var(--bad); font-size:13px; margin:6px 0; white-space:pre-wrap; }
   #dbg { font-size:11px; color:var(--sub); margin-bottom:6px; word-break:break-all; }
   .note { font-size:12px; color:var(--sub); margin-top:6px; }
@@ -244,6 +268,9 @@
     <button class="ghost" id="btnUndo" onclick="undoLast()" disabled>↩ 直前取消</button>
   </div>
   <div class="row">
+    <button class="ghost" id="btnManual" onclick="openManual()">✍ 手入力（QRが読めない時）</button>
+  </div>
+  <div class="row">
     <button class="ghost" id="btnTorch" onclick="toggleTorch()" disabled>🔦 ライト</button>
     <button class="ghost" id="btnCamToggle" onclick="toggleCameraManual()">📷 カメラOFF</button>
     <button class="ghost" onclick="openHistory()">📋 履歴</button>
@@ -320,6 +347,52 @@
       <button class="primary" onclick="saveExtra()">保存</button>
     </div>
     <button class="ghost full" onclick="closeExtra()">閉じる</button>
+  </div>
+</div>
+
+<!-- ========== 手入力（QRが読めない時）。品番マスタから選び、箱数・端数を入れる ========== -->
+<div class="sheet" id="manualSheet">
+  <div class="box" id="manualBox">
+    <h3>✍ 手入力（QRが読めない時）</h3>
+    <div id="manualStep1">
+      <label class="fld">品番（一部でOK。ハイフンは打たなくてよい）</label>
+      <input type="text" id="manualQ" class="manual-q" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="例：17575K0020">
+      <div class="manual-list" id="manualList"></div>
+    </div>
+    <div id="manualStep2" style="display:none;">
+      <div class="manual-picked">
+        <div class="mp-h" id="manualPickedH">—</div>
+        <div class="mp-n" id="manualPickedN"></div>
+      </div>
+      <label class="fld">収容数（1箱の入数）</label>
+      <div class="nyuka-display" id="manualYoubunBox" onclick="manualNumpad('youbun')">
+        <span id="manualYoubunDisp" class="nyuka-val empty">—</span><span class="nyuka-icon" id="manualYoubunIcon">⌨</span>
+      </div>
+      <div class="manual-note" id="manualYoubunNote"></div>
+      <div class="manual-grid">
+        <div>
+          <label class="fld">箱数（満杯の箱）</label>
+          <div class="nyuka-display" onclick="manualNumpad('hako')">
+            <span id="manualHakoDisp" class="nyuka-val empty">—</span><span class="nyuka-icon">⌨</span>
+          </div>
+        </div>
+        <div>
+          <label class="fld">端数（半端箱の入数）</label>
+          <div class="nyuka-display" onclick="manualNumpad('hasuu')">
+            <span id="manualHasuuDisp" class="nyuka-val empty">—</span><span class="nyuka-icon">⌨</span>
+          </div>
+        </div>
+      </div>
+      <label class="fld">理由（必ず選ぶ）</label>
+      <div class="manual-reasons" id="manualReasons"></div>
+      <input type="text" id="manualReasonOther" class="manual-q" style="display:none; margin-top:8px; font-size:16px;" maxlength="20" autocomplete="off" placeholder="理由を書く（20文字まで）">
+      <div class="manual-calc" id="manualCalc">—</div>
+      <div class="row">
+        <button class="ghost" onclick="manualBack()">← 品番を選び直す</button>
+        <button class="primary" id="manualAddBtn" onclick="manualAdd()">追加</button>
+      </div>
+    </div>
+    <button class="ghost full" style="margin-top:10px;" onclick="closeManual()">閉じる</button>
   </div>
 </div>
 
@@ -417,7 +490,7 @@ loadJsQR_();
 </script>
 <script>
 /* ================= 設定 ================= */
-const APP_VERSION = 'v1.70';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
+const APP_VERSION = 'v1.71';   // 更新のたびにここを上げる（ログイン画面右上に表示。反映確認用）
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzALEt3uPha_JbW7USYz8Q3TJnbg9gJauFe9yTEC3KqPrIqChkBLb-Tj0kt5WjqlMor/exec';
 
 const MAKERS_FALLBACK = ['大澤熔接工業所','清国溶接','小山製作所','山田鉄工所','丸磯工業所','花木製作所','羽谷工業所','伊藤プレス','メタルクリーン','マルマツ','ウエルギコウ','松原工業所','安井鉄工所','真鍋工業','向井工作所','大動工業','アクトメタル','日本グラス','エバー','トライ','村田工業所','檜山技研工業所','加藤技研工業所','トヨアケメッキ','福洋精工'];
@@ -534,7 +607,7 @@ function loadWithFreshAuthThenEnter(){
       if (res && res.ok){
         auth = {
           maker: res.maker, pw: auth.pw, offset: res.offset || 0,
-          hinbanReady: !!res.hinbanReady, hinban: res.hinban || [], torihiki: res.torihiki || [], toriCheck: res.toriCheck !== false,
+          hinbanReady: !!res.hinbanReady, hinban: res.hinban || [], hinbanInfo: res.hinbanInfo || [], torihiki: res.torihiki || [], toriCheck: res.toriCheck !== false,
           makers: res.makers || MAKERS_FALLBACK, ts: Date.now()
         };
         lset(K_AUTH, auth);
@@ -601,7 +674,7 @@ function doLogin(){
     if (!res.ok){ err.textContent = res.message || 'ログイン失敗'; return; }
     auth = {
       maker: res.maker, pw: pw, offset: res.offset || 0,
-      hinbanReady: !!res.hinbanReady, hinban: res.hinban || [], torihiki: res.torihiki || [], toriCheck: res.toriCheck !== false,
+      hinbanReady: !!res.hinbanReady, hinban: res.hinban || [], hinbanInfo: res.hinbanInfo || [], torihiki: res.torihiki || [], toriCheck: res.toriCheck !== false,
       makers: res.makers || MAKERS_FALLBACK, ts: Date.now()
     };
     lset(K_AUTH, auth);
@@ -849,7 +922,7 @@ function computeCamVisible(){
   if (!NATIVE) return false;
   const scanScreen = document.getElementById('s-scan');
   if (!scanScreen || !scanScreen.classList.contains('on')) return false;
-  const blockerIds = ['modalOverlay', 'extraSheet', 'numpadSheet'];
+  const blockerIds = ['modalOverlay', 'extraSheet', 'numpadSheet', 'manualSheet'];
   for (const id of blockerIds){
     const el = document.getElementById(id);
     if (el && el.classList.contains('on')) return false;
@@ -1104,7 +1177,7 @@ const REJ_LABEL = { format:'NG', dup:'重複', tori:'他社', master:'マスタ�
 function scanInputAllowed(){
   if (sending) return false;
   if (!document.getElementById('s-scan').classList.contains('on')) return false;
-  const blockerIds = ['modalOverlay', 'extraSheet', 'numpadSheet', 'recoveryQrOverlay'];
+  const blockerIds = ['modalOverlay', 'extraSheet', 'numpadSheet', 'recoveryQrOverlay', 'manualSheet'];
   for (const id of blockerIds){
     const el = document.getElementById(id);
     if (el && el.classList.contains('on')) return false;
@@ -1192,6 +1265,20 @@ function reject(kind, msg){
 function undoLast(){
   if (!pending || !pending.scans.length) return;
   const last = pending.scans[pending.scans.length - 1];
+  if (last.manual && last.bid){   // 手入力は、1回ぶん（同じbid）をまとめて取り消す
+    const grp = pending.scans.filter(function (s) { return s.bid === last.bid; });
+    showConfirm('直前の手入力を取り消します。\n品番: ' + last.hinban + '（' + grp.length + '枚ぶん）\nよろしいですか？', function(){
+      grp.forEach(function (s) { qrSeen.delete(s.qr); });
+      pending.scans = pending.scans.filter(function (s) { return s.bid !== last.bid; });
+      const o = pending.extra[last.hinban];
+      if (o && last.bh){ delete o.hasuu; if (!Object.keys(o).length) delete pending.extra[last.hinban]; }
+      if (!pending.scans.some(function (s) { return s.hinban === last.hinban; })) delete pending.extra[last.hinban];
+      lset(K_PENDING, pending);
+      renderTally();
+      refreshResultForLastHinban();
+    });
+    return;
+  }
   showConfirm('直前の読取を取り消します。\n品番: ' + last.hinban + '\nよろしいですか？', function(){
     pending.scans.pop();
     qrSeen.delete(last.qr);
@@ -1225,7 +1312,7 @@ function renderTally(){
     if (it.hasuu) tag.push('端数' + it.hasuu);
     if (it.hakai) tag.push('破壊' + it.hakai);
     return '<tr>'
-      + '<td>' + esc(it.hinban) + (tag.length ? ' <span style="color:var(--warn);font-size:12px;">'+tag.join(' ')+'</span>' : '') + '</td>'
+      + '<td>' + esc(it.hinban) + (tag.length ? ' <span style="color:var(--warn);font-size:12px;">'+tag.join(' ')+'</span>' : '') + (it.man ? ' <span style="color:var(--accent);font-size:12px;">✍'+it.man+'枚' + (it.rsn ? '（'+esc(it.rsn)+'）' : '') + '</span>' : '') + '</td>'
       + '<td class="num">' + it.hako + '箱</td>'
       + '<td class="num">' + it.suryou + '個</td></tr>';
   }).join('');
@@ -1358,6 +1445,268 @@ function showConfirm(msg, yesCb, noCb){
   ]);
 }
 
+/* ================= 手入力（QRが読めない時） =================
+   品番マスタ（端末に入っている一覧）から品番を選び、箱数・端数を入れる。
+   送るデータは、今までと同じ形（1箱＝1行）。QRの代わりに「疑似QR」を作って入れる。
+   受入照合(Access)は、疑似QRのうち「品番」「収容数(85文字目から10桁)」と、端数だけで突合する。
+   納入番号・発注管理番号は表示用なので、手入力は 'MANUL'・0 を入れる。 */
+function buildManualQr(o){
+  const a = new Array(270).fill(' ');
+  function put(pos, s){ s = String(s); for (let i = 0; i < s.length && pos + i < 270; i++) a[pos + i] = s[i]; }
+  const h = String(o.hinban);
+  const t = String(o.tori || '');
+  put(0, '20110607'); put(14, 'B1'); put(17, '00');
+  put(20, t.slice(-6).padStart(6, ' '));
+  if (h.length > 24) put(38, h.slice(0, 25)); else put(39, h);
+  put(64, 'PX'); put(68, t.slice(-5)); put(77, 'P0000');
+  put(85, String(o.youbun || 0).padStart(7, '0').slice(-7));
+  put(99, '0001'); put(115, '000'); put(119, 'FT'); put(125, '2' + o.ymd);
+  put(143, h.slice(0, 25));
+  put(160, ('MANUAL-' + (o.rc || 0) + '-' + o.id).slice(0, 30));   // 'MANUAL-<理由の番号>-…'：Access側でも、手入力と理由の番号が分かる
+  put(190, '01MANUL' + o.ymd + '01');          // 納入番号(193〜197文字目)・納入日(198〜205文字目)
+  put(209, '000000000001'); put(221, o.ymd); put(229, '00:00'); put(234, '35000');   // 最後の「:」は232文字目に置く
+  put(244, '84480'); put(251, '000.0'); put(258, ' 00000000000');                  // 末尾12文字＝発注管理番号(0)
+  return a.join('');
+}
+
+// 手入力の理由（必ず選ぶ）。選んだ文字が、スプレッドシートとCSVの「手入力理由」列に入る。番号(1〜)は疑似QRの中にも入る。
+// 理由を増やす・変える時は、この一覧だけを直す（番号は、並びの順。途中に入れると、過去の番号とずれるので、増やす時は末尾に足す）。
+const MANUAL_REASONS = ['QR汚れ', 'QR破れ・欠け', 'QR読めない', 'FAXで読めない', 'かんばん無し', '読取機の不調', 'その他'];
+const MANUAL_REASON_OTHER = MANUAL_REASONS.length - 1;   // 「その他」の位置（自由入力が出る）
+let manualIdx = null, manualIdxTs = null;   // 検索用の品番一覧 [{h,key,y,n,t}]
+let manualRes = [];                          // いまの候補
+let mn = null;                               // 選んだ品番 {h,y,n,t,youbun,hako,hasuu}
+let manualTimer = null;
+function manualNorm(s){ return String(s || '').normalize('NFKC').toUpperCase().replace(/[^0-9A-Z]/g, ''); }
+function manualBuildIndex(){
+  if (manualIdx && manualIdxTs === (auth && auth.ts)) return;
+  let info = (auth && auth.hinbanInfo && auth.hinbanInfo.length) ? auth.hinbanInfo : null;
+  if (!info) info = Array.from(new Set((auth && auth.hinban) || [])).map(function (h) { return [h, 0, '', '']; });
+  manualIdx = info.map(function (x) {
+    return { h: String(x[0]).trim(), key: manualNorm(x[0]), y: parseInt(x[1], 10) || 0, n: String(x[2] || ''), t: String(x[3] || '') };
+  }).filter(function (x) { return x.key; });
+  manualIdxTs = auth && auth.ts;
+}
+// q を、s のどこか一部分と比べた時の、いちばん小さい違いの数（1文字の入れ違い・抜け・余りを許す近い品番を探す）
+function manualApprox(q, s){
+  const m = q.length;
+  let prev = new Array(m + 1), cur = new Array(m + 1);
+  for (let i = 0; i <= m; i++) prev[i] = i;
+  let best = m;
+  for (let j = 0; j < s.length; j++){
+    cur[0] = 0;
+    const c = s.charCodeAt(j);
+    for (let i = 1; i <= m; i++){
+      const v = Math.min(prev[i - 1] + (q.charCodeAt(i - 1) === c ? 0 : 1), prev[i] + 1, cur[i - 1] + 1);
+      cur[i] = v;
+    }
+    if (cur[m] < best) best = cur[m];
+    const t = prev; prev = cur; cur = t;
+  }
+  return best;
+}
+function manualSearch(q){
+  const nq = manualNorm(q);
+  if (nq.length < 2) return { list: [], need: true };
+  const hit = [];
+  manualIdx.forEach(function (x) {
+    const p = x.key.indexOf(nq);
+    if (p < 0) return;
+    hit.push({ x: x, r: (x.key === nq ? 0 : (p === 0 ? 1 : 2)), p: p });
+  });
+  hit.sort(function (a, b) { return a.r - b.r || a.p - b.p || a.x.key.length - b.x.key.length || (a.x.h < b.x.h ? -1 : 1); });
+  if (hit.length < 5 && nq.length >= 5){
+    const seen = {};
+    hit.forEach(function (o) { seen[o.x.h] = true; });
+    const near = [];
+    manualIdx.forEach(function (x) {
+      if (seen[x.h]) return;
+      const d = manualApprox(nq, x.key);
+      if (d <= 1) near.push({ x: x, r: 3, p: d });
+    });
+    near.sort(function (a, b) { return a.x.key.length - b.x.key.length || (a.x.h < b.x.h ? -1 : 1); });
+    near.slice(0, 20).forEach(function (o) { hit.push(o); });
+  }
+  return { list: hit, need: false };
+}
+function manualRenderList(){
+  const box = document.getElementById('manualList');
+  const q = document.getElementById('manualQ').value;
+  if (!manualIdx || !manualIdx.length){
+    manualRes = [];
+    box.innerHTML = '<div class="manual-hint">品番マスタが入っていません（マスタ未整備、または一度もログインできていません）。手入力は使えません。</div>';
+    return;
+  }
+  const r = manualSearch(q);
+  if (r.need){ manualRes = []; box.innerHTML = '<div class="manual-hint">2文字以上入れると、候補が出ます。</div>'; return; }
+  manualRes = r.list.slice(0, 30);
+  if (!manualRes.length){ box.innerHTML = '<div class="manual-hint">該当する品番が、マスタにありません。打ち間違いか、別のメーカーの品番かもしれません。</div>'; return; }
+  box.innerHTML = manualRes.map(function (o, i) {
+    const sub = [];
+    if (o.x.n) sub.push(esc(o.x.n));
+    if (o.x.y) sub.push('収容数 ' + o.x.y);
+    if (o.r === 3) sub.push('近い品番');
+    return '<div class="manual-item' + (o.r === 3 ? ' near' : '') + '" data-i="' + i + '"><div class="mi-h">' + esc(o.x.h) + '</div>'
+      + (sub.length ? '<div class="mi-s">' + sub.join('　') + '</div>' : '') + '</div>';
+  }).join('') + (r.list.length > 30 ? '<div class="manual-hint">ほかに ' + (r.list.length - 30) + '件あります。続けて入れて絞ってください。</div>' : '');
+}
+function manualFitViewport(){
+  const sh = document.getElementById('manualSheet');
+  if (!sh.classList.contains('on')) return;
+  const vv = window.visualViewport;
+  if (vv){ sh.style.top = vv.offsetTop + 'px'; sh.style.height = vv.height + 'px'; sh.style.bottom = 'auto'; }
+}
+function openManual(){
+  if (sending || !pending) return;
+  manualBuildIndex();
+  mn = null;
+  document.getElementById('manualQ').value = '';
+  document.getElementById('manualStep1').style.display = '';
+  document.getElementById('manualStep2').style.display = 'none';
+  manualRenderList();
+  document.getElementById('manualSheet').classList.add('on');
+  manualFitViewport();
+  setTimeout(function () { try { document.getElementById('manualQ').focus(); } catch (e) {} }, 200);
+}
+function closeManual(){
+  document.getElementById('manualSheet').classList.remove('on');
+  try { document.getElementById('manualQ').blur(); } catch (e) {}
+}
+function manualBack(){
+  mn = null;
+  document.getElementById('manualStep1').style.display = '';
+  document.getElementById('manualStep2').style.display = 'none';
+  manualRenderList();
+  setTimeout(function () { try { document.getElementById('manualQ').focus(); } catch (e) {} }, 100);
+}
+// 収容数：この品番がすでに入っていれば、その値に合わせる（確認画面の計算が、1つの値で行われるため）。無ければマスタ。それも無ければ手入力。
+function manualYoubunLocked(h){
+  const arr = pending.scans.filter(function (s) { return s.hinban === h; });
+  return arr.length && arr[0].youbun ? arr[0].youbun : 0;
+}
+function manualPick(i){
+  const o = manualRes[i];
+  if (!o) return;
+  try { document.getElementById('manualQ').blur(); } catch (e) {}
+  const locked = manualYoubunLocked(o.x.h);
+  mn = { h: o.x.h, n: o.x.n, t: o.x.t, y: o.x.y, locked: locked, youbun: locked || o.x.y || 0, hako: 0, hasuu: 0, ri: -1, other: '' };
+  document.getElementById('manualReasonOther').value = '';
+  document.getElementById('manualStep1').style.display = 'none';
+  document.getElementById('manualStep2').style.display = '';
+  manualRefresh();
+}
+function manualRefresh(){
+  if (!mn) return;
+  document.getElementById('manualPickedH').textContent = mn.h;
+  document.getElementById('manualPickedN').textContent = mn.n || '';
+  setNyukaDisp('manualYoubunDisp', mn.youbun ? mn.youbun : '');
+  setNyukaDisp('manualHakoDisp', mn.hako ? mn.hako : '');
+  setNyukaDisp('manualHasuuDisp', mn.hasuu ? mn.hasuu : '');
+  const note = document.getElementById('manualYoubunNote');
+  const icon = document.getElementById('manualYoubunIcon');
+  if (mn.locked){ note.textContent = 'この品番は、すでに入っているので、その収容数に合わせています。'; icon.style.display = 'none'; }
+  else if (mn.y){ note.textContent = 'マスタの収容数です。違う時は、タップして直せます。'; icon.style.display = ''; }
+  else { note.textContent = 'マスタに収容数がありません。タップして入れてください。'; icon.style.display = ''; }
+  const y = mn.youbun || 0;
+  const total = mn.hako * y + mn.hasuu;
+  document.getElementById('manualCalc').textContent = (y ? (mn.hako + '箱 × ' + y + (mn.hasuu ? ' ＋ 端数' + mn.hasuu : '') + ' ＝ ' + total + '個') : '収容数を入れてください');
+  document.getElementById('manualReasons').innerHTML = MANUAL_REASONS.map(function (t, i) {
+    return '<div class="manual-chip' + (mn.ri === i ? ' sel' : '') + '" data-ri="' + i + '">' + esc(t) + '</div>';
+  }).join('');
+  document.getElementById('manualReasonOther').style.display = (mn.ri === MANUAL_REASON_OTHER) ? '' : 'none';
+}
+// 選んだ理由の文字（「その他」は、書いた内容を（）で足す。カンマ・改行は、CSVを壊すので空白にする）
+function manualReasonText(){
+  if (!mn || mn.ri < 0) return '';
+  let t = MANUAL_REASONS[mn.ri];
+  if (mn.ri === MANUAL_REASON_OTHER){
+    const o = String(mn.other || '').replace(/[,，\r\n\t]/g, ' ').trim();
+    if (o) t += '（' + o + '）';
+  }
+  return t;
+}
+function manualNumpad(which){
+  if (!mn) return;
+  if (which === 'youbun' && mn.locked) return;
+  const label = which === 'youbun' ? '収容数（1箱の入数）' : (which === 'hako' ? '箱数（満杯の箱）' : '端数（半端箱の入数）');
+  const cur = which === 'youbun' ? mn.youbun : (which === 'hako' ? mn.hako : mn.hasuu);
+  openNumpad(label, cur || '', function (v) {
+    const n = (v === '' ? 0 : v);
+    if (which === 'youbun') mn.youbun = n; else if (which === 'hako') mn.hako = n; else mn.hasuu = n;
+    manualRefresh();
+  });
+}
+function manualAdd(){
+  if (sending || !mn || !pending) return;
+  const h = mn.h, y = mn.youbun || 0, hako = mn.hako || 0, hasuu = mn.hasuu || 0;
+  const n = hako + (hasuu > 0 ? 1 : 0);
+  if (!y){ showAlert('収容数が入っていません。収容数をタップして入れてください。'); return; }
+  if (n <= 0){ showAlert('箱数か端数を入れてください。'); return; }
+  if (n > 300){ showAlert('一度に追加できるのは300箱までです（今回 ' + n + '箱）。'); return; }
+  if (mn.ri < 0){ showAlert('理由を選んでください。'); return; }
+  if (mn.ri === MANUAL_REASON_OTHER && !String(mn.other || '').trim()){ showAlert('「その他」の理由を書いてください。'); return; }
+  const rsn = manualReasonText(), rc = mn.ri + 1;
+  const ex = pending.extra[h] || {};
+  if (hasuu > 0 && ex.hasuu){
+    showAlert('この品番には、すでに端数（' + ex.hasuu + '）が入っています。\n端数は、1回の送信で1つだけです。\n箱数だけを追加するか、いまの端数を送信してから、もう一度入れてください。');
+    return;
+  }
+  const have = pending.scans.filter(function (s) { return s.hinban === h; }).length;
+  const warn = [];
+  if (hasuu > 0 && hasuu >= y) warn.push('端数（' + hasuu + '）が、収容数（' + y + '）以上です。');
+  if (n >= 60) warn.push('箱数が多いです（' + n + '箱）。');
+  if (have) warn.push('この品番は、すでに ' + have + '枚 入っています（読取＋手入力）。さらに足します。');
+  const total = hako * y + hasuu;
+  showConfirm('手入力で追加します。\n\n品番: ' + h + '\n' + hako + '箱 × ' + y + (hasuu > 0 ? ' ＋ 端数' + hasuu : '') + ' ＝ ' + total + '個\n理由: ' + rsn + (warn.length ? '\n\n⚠ ' + warn.join('\n⚠ ') : ''), function () {
+    manualCommit(h, y, hako, hasuu, mn ? mn.t : '', rsn, rc);
+  });
+}
+function manualCommit(h, y, hako, hasuu, tori, reason, rc){
+  if (sending || !pending) return;
+  const n = hako + (hasuu > 0 ? 1 : 0);
+  const ymd = String(pending.shukkaDate || '').replace(/[^0-9]/g, '').slice(0, 8);
+  const bid = deviceId() + '-m' + (++scanSeq);
+  for (let i = 0; i < n; i++){
+    const d = new Date();
+    const seq = ++scanSeq;
+    const ts = fmtDate(d) + ' ' + d.toTimeString().slice(0, 8)
+             + '.' + String(d.getMilliseconds()).padStart(3, '0')
+             + '/' + deviceId() + '-' + seq;
+    const qr = buildManualQr({ hinban: h, youbun: y, tori: tori, ymd: ymd, id: deviceId() + '-' + seq, rc: rc });
+    pending.scans.push({ ts: ts, qr: qr, hinban: h, youbun: y, manual: true, bid: bid, bh: hasuu > 0 ? 1 : 0, reason: reason || '' });
+    qrSeen.add(qr);
+  }
+  if (hasuu > 0){ const o = Object.assign({}, pending.extra[h] || {}); o.hasuu = String(hasuu); pending.extra[h] = o; }
+  lset(K_PENDING, pending);
+  closeManual();
+  lastScannedHinban = h;
+  refreshResultForLastHinban();
+  renderTally();
+  if (document.getElementById('beepOn').checked) beep(1250, .28);
+}
+document.getElementById('manualReasons').addEventListener('click', function (ev) {
+  let el = ev.target;
+  while (el && el !== this && !(el.dataset && el.dataset.ri !== undefined)) el = el.parentNode;
+  if (!mn || !el || el === this || !el.dataset || el.dataset.ri === undefined) return;
+  mn.ri = parseInt(el.dataset.ri, 10);
+  manualRefresh();
+  if (mn.ri === MANUAL_REASON_OTHER) setTimeout(function () { try { document.getElementById('manualReasonOther').focus(); } catch (e) {} }, 100);
+});
+document.getElementById('manualReasonOther').addEventListener('input', function () { if (mn) mn.other = this.value; });
+document.getElementById('manualQ').addEventListener('input', function () {
+  clearTimeout(manualTimer);
+  manualTimer = setTimeout(manualRenderList, 120);
+});
+document.getElementById('manualList').addEventListener('click', function (ev) {
+  let el = ev.target;
+  while (el && el !== this && !(el.dataset && el.dataset.i !== undefined)) el = el.parentNode;
+  if (el && el !== this && el.dataset && el.dataset.i !== undefined) manualPick(parseInt(el.dataset.i, 10));
+});
+if (window.visualViewport){
+  window.visualViewport.addEventListener('resize', manualFitViewport);
+  window.visualViewport.addEventListener('scroll', manualFitViewport);
+}
+
 /* ================= 確認 ================= */
 function goReview(){
   if (!pending.scans.length){ showAlert('まだ1枚も読み取っていません'); return; }
@@ -1378,7 +1727,9 @@ function reviewItems(){
     const hako = hasuuNum > 0 ? (mai - 1) : mai;
     const youbun = arr[0].youbun || 0;   // 同じ品番なら全枚同じ値のはず
     const suryou = hako * youbun + hasuuNum;
-    return { hinban: h, mai: mai, hako: hako, youbun: youbun, suryou: suryou, hasuu: ex.hasuu || '', hakai: ex.hakai || '' };
+    return { hinban: h, mai: mai, hako: hako, youbun: youbun, suryou: suryou, hasuu: ex.hasuu || '', hakai: ex.hakai || '',
+             man: arr.filter(function (s) { return s.manual; }).length,
+             rsn: Array.from(new Set(arr.filter(function (s) { return s.manual && s.reason; }).map(function (s) { return s.reason; }))).join('・') };
   });
 }
 // 品番ごとにカード表示（横スクロール不要）。端数・破壊はタップで共通テンキーを開く。
@@ -1391,7 +1742,7 @@ function renderReview(){
     const hAttr = esc(h);
     return '<tr>'
       + '<td>'
-        + '<div class="hinban-name">' + esc(h) + '</div>'
+        + '<div class="hinban-name">' + esc(h) + (it.man ? ' <span style="color:var(--accent);font-size:12px;font-weight:700;">✍手入力' + it.man + '枚' + (it.rsn ? '（' + esc(it.rsn) + '）' : '') + '</span>' : '') + '</div>'
         + '<div class="rev-tags">'
           + '<span class="rev-tag numtap' + (it.hasuu===''?' empty':'') + '" data-h="' + hAttr + '" data-key="hasuu">端数' + (it.hasuu!==''?it.hasuu:'—') + '</span>'
           + '<span class="rev-tag numtap' + (it.hakai===''?' empty':'') + '" data-h="' + hAttr + '" data-key="hakai">破壊' + (it.hakai!==''?it.hakai:'—') + '</span>'
@@ -1453,7 +1804,8 @@ function buildRows(){
       rows.push({
         ts: s.ts, qr: s.qr, hinban: h,
         hasuu: (isLast && ex.hasuu) ? ex.hasuu : '',
-        hakai: (isLast && ex.hakai) ? ex.hakai : ''
+        hakai: (isLast && ex.hakai) ? ex.hakai : '',
+        reason: s.reason || ''
       });
     });
   });
@@ -1592,7 +1944,7 @@ function showHistoryDetail(i){
     const hasuu = (it.hasuu !== '' && it.hasuu != null) ? it.hasuu : '—';
     const hakai = (it.hakai !== '' && it.hakai != null) ? it.hakai : '—';
     return '<tr><td>'
-      + '<div class="hinban-name">' + esc(it.hinban) + '</div>'
+      + '<div class="hinban-name">' + esc(it.hinban) + (it.man ? ' <span style="color:var(--accent);font-size:12px;font-weight:700;">✍手入力' + it.man + '枚' + (it.rsn ? '（' + esc(it.rsn) + '）' : '') + '</span>' : '') + '</div>'
       + '<div class="rev-tags"><span class="rev-tag" style="cursor:default;">端数' + hasuu + '</span><span class="rev-tag" style="cursor:default;">破壊' + hakai + '</span></div>'
       + '</td>'
       + '<td class="hako">' + it.hako + '</td>'
